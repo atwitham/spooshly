@@ -16,7 +16,20 @@ export const SIMPLE_CATEGORIES: Category[] = ["seasoning", "oil", "essentials", 
 
 // Categories where quantity can be nudged up/down in place instead of only
 // removed wholesale (things you use gradually rather than "use up" at once).
-export const STEPPER_CATEGORIES: Category[] = ["essentials"];
+export const STEPPER_CATEGORIES: Category[] = ["seasoning", "oil", "essentials"];
+
+// Categories where adding a new item with a name that already exists merges
+// into the existing row (adds to its quantity) instead of creating a
+// duplicate. Meat is excluded on purpose: each package is kept distinct
+// because packages can have different weights and dates.
+export const MERGE_ON_ADD_CATEGORIES: Category[] = [
+  "seasoning",
+  "oil",
+  "essentials",
+  "produce",
+  "pantry",
+  "other",
+];
 
 export type Unit = "oz" | "lb" | "g" | "kg" | "count" | "ml" | "l";
 

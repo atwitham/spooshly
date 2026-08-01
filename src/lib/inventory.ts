@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import type { Category, InventoryItem, Unit } from "./types";
+import { MERGE_ON_ADD_CATEGORIES } from "./types";
 
 export async function fetchItems(householdId: string, category?: Category) {
   let query = supabase
@@ -60,6 +61,43 @@ export async function addItem(input: NewItemInput) {
   const { data, error } = await supabase.from("inventory_items").insert(input).select().single();
   if (error) throw error;
   return data as InventoryItem;
+}
+
+/**
+ * Add an item, but for categories where duplicates don't make sense
+ * (everything except meat), if an item with the same name and unit already
+ * exists in this category, merge into it by adding to its quantity instead
+ * of creating a second row. Meat always creates a new package, since two
+ * packages of "Chicken breast" are genuinely separate physical things.
+ */
+export async function addOrMergeItem(input: NewItemInput) {
+  if (!MERGE_ON_ADD_CATEGORIES.includes(input.category)) {
+    return addItem(input);
+  }
+
+  const { data: existing, error: findError } = await supabase
+    .from("inventory_items")
+    .select("*")
+    .eq("household_id", input.household_id)
+    .eq("category", input.category)
+    .eq("unit", input.unit)
+    .ilike("name", input.name.trim())
+    .maybeSingle();
+  if (findError) throw findError;
+
+  if (existing) {
+    const merged = existing as InventoryItem;
+    await updateItemQuantity(merged.id, merged.quantity + input.quantity);
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .select("*")
+      .eq("id", merged.id)
+      .single();
+    if (error) throw error;
+    return data as InventoryItem;
+  }
+
+  return addItem(input);
 }
 
 export async function updateItemQuantity(id: string, quantity: number) {

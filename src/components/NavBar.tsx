@@ -15,7 +15,10 @@ const tabs = [
 export default function NavBar() {
   const pathname = usePathname();
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-line bg-paper/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-20 border-t border-line bg-paper/95 backdrop-blur"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 14px)" }}
+    >
       <div className="mx-auto flex max-w-md justify-between px-2">
         {tabs.map(({ href, label, Icon }) => {
           const active = pathname === href;
@@ -24,7 +27,7 @@ export default function NavBar() {
             <Link
               key={href}
               href={href}
-              className="flex flex-1 flex-col items-center gap-1 py-2 text-xs"
+              className="flex flex-1 flex-col items-center gap-1 pt-3 text-xs"
               style={{ minHeight: 44 }}
             >
               <Icon size={20} color={color} />

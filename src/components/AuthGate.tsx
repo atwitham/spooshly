@@ -31,7 +31,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="pb-20">
+    <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 88px)" }}>
       <Header />
       {children}
       <NavBar />

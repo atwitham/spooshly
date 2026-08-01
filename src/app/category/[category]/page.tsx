@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Beef, FlaskConical, Droplet, Bath, Apple, Package, Box } from "lucide-react";
+import { ArrowLeft, Beef, FlaskConical, Droplet, Bath, Apple, Package, Box, Plus } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
 import { fetchItems } from "@/lib/inventory";
 import { CATEGORIES, type Category, type InventoryItem } from "@/lib/types";
 import MeatGroupList from "@/components/MeatGroupList";
 import SimpleItemList from "@/components/SimpleItemList";
+import AddItemModal from "@/components/AddItemModal";
 
 const ICONS: Record<Category, typeof Beef> = {
   meat: Beef,
@@ -29,6 +30,7 @@ export default function CategoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
 
   async function load() {
     if (!householdId) return;
@@ -59,8 +61,19 @@ export default function CategoryPage() {
         placeholder={`Search ${meta?.label.toLowerCase() ?? ""}...`}
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        className="mb-4 w-full rounded-lg border border-line bg-paper px-3 py-2"
+        className="mb-3 w-full rounded-lg border border-line bg-paper px-3 py-2"
       />
+
+      <button
+        onClick={() => setShowAdd(true)}
+        className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper py-2 text-sm font-semibold text-deep"
+      >
+        <Plus size={16} /> Add {meta?.label.toLowerCase() ?? "item"}
+      </button>
+
+      {showAdd && (
+        <AddItemModal category={category} onClose={() => setShowAdd(false)} onAdded={load} />
+      )}
 
       {loading ? (
         <p className="item-meta">Loading…</p>
