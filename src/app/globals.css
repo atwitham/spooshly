@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  overscroll-behavior-y: none;
+  background: #FCFCFA;
+  font-family: 'Gabarito', system-ui, sans-serif;
+  color: #123528;
+}
+
+input, select, textarea {
+  font-size: 16px; /* prevents iOS auto-zoom on focus */
+  font-family: 'Gabarito', system-ui, sans-serif;
+}
+
+.pill-restock {
+  background: #FFC43D;
+  color: #123528;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: none;
+  white-space: nowrap;
+}
+
+.pill-secondary {
+  background: none;
+  border: 1px solid #E7E5DD;
+  color: #123528;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #82806F;
+}
+
+.item-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #123528;
+}
+
+.item-meta {
+  font-size: 13px;
+  font-weight: 400;
+  color: #82806F;
+}

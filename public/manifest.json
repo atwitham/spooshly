@@ -1,0 +1,13 @@
+{
+  "name": "Splooshly",
+  "short_name": "Splooshly",
+  "description": "Kitchen and home inventory",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FCFCFA",
+  "theme_color": "#17A45E",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -1,0 +1,28 @@
+/* Splooshly — design tokens */
+:root {
+  --sprout:       #17A45E;  /* accent: mark, category icons, active nav */
+  --sprout-light: #4ED28C;  /* accent on dark surfaces only */
+  --deep:         #123528;  /* body text, dark surface */
+  --zest:         #FFC43D;  /* restock ONLY — never decorative */
+  --mist:         #E9F6EE;  /* selected rows, section headers */
+  --paper:        #FCFCFA;  /* app background */
+  --line:         #E7E5DD;  /* hairlines, card borders */
+  --muted:        #82806F;  /* secondary text on paper */
+  --surface-dark: #0E2620;  /* dark card */
+  --muted-dark:   #8B9791;  /* secondary text on dark */
+
+  --font: 'Gabarito', system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+
+  /* type scale (px) */
+  --t-display: 42; --t-title: 24; --t-row: 15; --t-meta: 13; --t-label: 10;
+
+  --r-card: 12px; --r-sheet: 18px; --r-pill: 999px; --r-tile: 24px;
+  --space: 4px;          /* all spacing is a multiple of 4 */
+  --icon-stroke: 1.75;   /* on a 24px grid */
+  --tap-min: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #0B1A15; --line: #1E3830; --deep: #F2F7F4; --muted: #8B9791; --sprout: #4ED28C; }
+}
