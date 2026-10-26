@@ -1,45 +1,44 @@
 -- =============================================================================
 -- Splooshly redesign migration (Oct 2026)
 --
--- SAFE TO RUN ON THE LIVE DATABASE. Read this first:
---   * It never drops, deletes or overwrites any existing data.
+-- SAFE TO RUN ON THE LIVE DATABASE:
 --   * Step 0 copies every existing table into a private "splooshly_backup"
---     schema before anything else happens. That schema is not reachable
---     from the app or the public API.
---   * Every other step only ADDS tables/columns, then fills in the NEW
---     columns. Existing columns (name, quantity, unit, dates, etc.) are
---     never modified.
---   * It runs inside a single transaction: if anything fails, nothing changes.
---   * It is idempotent: running it twice is harmless.
---   * The old version of the app keeps working after this runs, so it's fine
---     to run it before the new code is deployed.
+--     schema first. The app and public API can't reach it.
+--   * Everything else only ADDS tables/columns, then fills in the NEW
+--     columns. Existing values (names, quantities, units, dates) are never
+--     modified or deleted.
+--   * One transaction: if anything fails, nothing changes.
+--   * Safe to run twice.
+--   * The current app keeps working after this runs.
 --
--- How to run: Supabase dashboard > SQL Editor > New query > paste all > Run.
+-- The only "drop" statements remove objects this script itself creates
+-- (a trigger, check constraints and access policies) so it can recreate them
+-- when run twice. They never touch data.
+--
+-- How to run: Supabase > SQL Editor > New query > paste all > Run.
+-- If Supabase asks about RLS, choose "Run without RLS": this script already
+-- turns RLS on for every table it creates.
 -- =============================================================================
 
 begin;
 
--- -----------------------------------------------------------------------------
--- 0. Backup (only created once; a second run keeps the original snapshot)
--- -----------------------------------------------------------------------------
+-- 0. Backup ------------------------------------------------------------------
 create schema if not exists splooshly_backup;
-revoke all on schema splooshly_backup from public;
-do $$
-begin
-  if to_regrole('anon') is not null then
-    execute 'revoke all on schema splooshly_backup from anon, authenticated';
-  end if;
-end $$;
+revoke all on schema splooshly_backup from public, anon, authenticated;
 
 create table if not exists splooshly_backup.inventory_items_20261025 as table public.inventory_items;
-create table if not exists splooshly_backup.usage_log_20261025       as table public.usage_log;
-create table if not exists splooshly_backup.shopping_list_20261025   as table public.shopping_list;
-create table if not exists splooshly_backup.households_20261025      as table public.households;
+create table if not exists splooshly_backup.usage_log_20261025 as table public.usage_log;
+create table if not exists splooshly_backup.shopping_list_20261025 as table public.shopping_list;
+create table if not exists splooshly_backup.households_20261025 as table public.households;
 create table if not exists splooshly_backup.household_members_20261025 as table public.household_members;
 
--- -----------------------------------------------------------------------------
--- 1. Products: one canonical row per real-world thing
--- -----------------------------------------------------------------------------
+alter table splooshly_backup.inventory_items_20261025 enable row level security;
+alter table splooshly_backup.usage_log_20261025 enable row level security;
+alter table splooshly_backup.shopping_list_20261025 enable row level security;
+alter table splooshly_backup.households_20261025 enable row level security;
+alter table splooshly_backup.household_members_20261025 enable row level security;
+
+-- 1. Products: one canonical row per real-world thing ------------------------
 create table if not exists products (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
@@ -56,52 +55,41 @@ create table if not exists products (
   updated_at timestamptz not null default now(),
   unique (household_id, normalized_key)
 );
+alter table products enable row level security;
 create index if not exists idx_products_household on products(household_id);
 
 drop trigger if exists trg_products_updated_at on products;
 create trigger trg_products_updated_at before update on products
 for each row execute function set_updated_at();
 
--- -----------------------------------------------------------------------------
--- 2. Packages (inventory_items): new columns only
---    Columns are added WITHOUT defaults first, backfilled from existing data,
---    and only then given a default, so existing rows get real values rather
---    than "today".
--- -----------------------------------------------------------------------------
+-- 2. Packages (inventory_items): new columns only ----------------------------
+-- Added without defaults, backfilled from existing data, then given a default,
+-- so existing rows get their real dates rather than "today".
 alter table inventory_items add column if not exists product_id uuid references products(id) on delete set null;
 alter table inventory_items add column if not exists added_at date;
 alter table inventory_items add column if not exists original_quantity numeric;
 alter table inventory_items add column if not exists storage text;
 alter table inventory_items add column if not exists source text;
 
--- Pause the updated_at trigger so backfilling new columns doesn't touch the
--- existing updated_at timestamps.
+-- Pause the updated_at trigger so the backfill doesn't change existing timestamps.
 alter table inventory_items disable trigger trg_inventory_updated_at;
 update inventory_items set added_at = (created_at at time zone 'America/Indiana/Indianapolis')::date where added_at is null;
 update inventory_items set original_quantity = quantity where original_quantity is null;
 alter table inventory_items enable trigger trg_inventory_updated_at;
 alter table inventory_items alter column added_at set default current_date;
 
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'inventory_items_storage_check') then
-    alter table inventory_items add constraint inventory_items_storage_check
-      check (storage is null or storage in ('freezer','fridge','pantry'));
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'inventory_items_source_check') then
-    alter table inventory_items add constraint inventory_items_source_check
-      check (source is null or source in ('manual','barcode','photo','shopping_list'));
-  end if;
-end $$;
+alter table inventory_items drop constraint if exists inventory_items_storage_check;
+alter table inventory_items add constraint inventory_items_storage_check
+  check (storage is null or storage in ('freezer','fridge','pantry'));
+alter table inventory_items drop constraint if exists inventory_items_source_check;
+alter table inventory_items add constraint inventory_items_source_check
+  check (source is null or source in ('manual','barcode','photo','shopping_list'));
 
 create index if not exists idx_inventory_product on inventory_items(product_id);
 
--- -----------------------------------------------------------------------------
--- 3. Usage events (usage_log): new columns only
---    kind:      'used' feeds pace/runway; 'tossed' is waste.
---    Existing rows: reason 'expired' -> tossed, everything else -> used
---    (the handoff says to keep old "remove" records as usage).
--- -----------------------------------------------------------------------------
+-- 3. Usage events (usage_log): new columns only ------------------------------
+-- kind: 'used' feeds pace/runway; 'tossed' is waste.
+-- Existing rows: reason 'expired' -> tossed, everything else -> used.
 alter table usage_log add column if not exists product_id uuid references products(id) on delete set null;
 alter table usage_log add column if not exists package_id uuid;
 alter table usage_log add column if not exists kind text;
@@ -113,32 +101,23 @@ update usage_log set toss_reason = 'expired' where kind = 'tossed' and toss_reas
 update usage_log set occurred_at = created_at where occurred_at is null;
 alter table usage_log alter column occurred_at set default now();
 
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'usage_log_kind_check') then
-    alter table usage_log add constraint usage_log_kind_check
-      check (kind is null or kind in ('used','tossed'));
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'usage_log_toss_reason_check') then
-    alter table usage_log add constraint usage_log_toss_reason_check
-      check (toss_reason is null or toss_reason in ('expired','spoiled'));
-  end if;
-end $$;
+alter table usage_log drop constraint if exists usage_log_kind_check;
+alter table usage_log add constraint usage_log_kind_check
+  check (kind is null or kind in ('used','tossed'));
+alter table usage_log drop constraint if exists usage_log_toss_reason_check;
+alter table usage_log add constraint usage_log_toss_reason_check
+  check (toss_reason is null or toss_reason in ('expired','spoiled'));
 
 create index if not exists idx_usage_product on usage_log(product_id, occurred_at);
 create index if not exists idx_usage_household_occurred on usage_log(household_id, occurred_at);
 
--- -----------------------------------------------------------------------------
--- 4. Shopping list: new columns only
--- -----------------------------------------------------------------------------
+-- 4. Shopping list: new columns only -----------------------------------------
 alter table shopping_list add column if not exists product_id uuid references products(id) on delete set null;
 alter table shopping_list add column if not exists quantity_text text;
 alter table shopping_list add column if not exists source text not null default 'manual';
 alter table shopping_list add column if not exists checked boolean not null default false;
 
--- -----------------------------------------------------------------------------
--- 5. Activity log (audit trail) and household settings
--- -----------------------------------------------------------------------------
+-- 5. Activity log and household settings -------------------------------------
 create table if not exists activity_log (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
@@ -151,6 +130,7 @@ create table if not exists activity_log (
   actor uuid references auth.users(id),
   at timestamptz not null default now()
 );
+alter table activity_log enable row level security;
 create index if not exists idx_activity_household on activity_log(household_id, at desc);
 create index if not exists idx_activity_package on activity_log(package_id);
 
@@ -163,55 +143,63 @@ create table if not exists household_settings (
   last_trip_at date,
   updated_at timestamptz not null default now()
 );
-
--- -----------------------------------------------------------------------------
--- 6. Row Level Security for the new tables + the new actions
---    (each household can only see and change its own rows)
--- -----------------------------------------------------------------------------
-alter table products enable row level security;
-alter table activity_log enable row level security;
 alter table household_settings enable row level security;
 
-do $$
-declare
-  t text;
-  member_check text := 'household_id in (select household_id from household_members where user_id = auth.uid())';
-begin
-  foreach t in array array['products','activity_log','household_settings'] loop
-    if not exists (select 1 from pg_policies where tablename = t and policyname = t || ' select') then
-      execute format('create policy %I on %I for select using (%s)', t || ' select', t, member_check);
-    end if;
-    if not exists (select 1 from pg_policies where tablename = t and policyname = t || ' insert') then
-      execute format('create policy %I on %I for insert with check (%s)', t || ' insert', t, member_check);
-    end if;
-    if not exists (select 1 from pg_policies where tablename = t and policyname = t || ' update') then
-      execute format('create policy %I on %I for update using (%s)', t || ' update', t, member_check);
-    end if;
-    if not exists (select 1 from pg_policies where tablename = t and policyname = t || ' delete') then
-      execute format('create policy %I on %I for delete using (%s)', t || ' delete', t, member_check);
-    end if;
-  end loop;
+-- 6. Access rules: each household only sees and changes its own rows ---------
+drop policy if exists "products select" on products;
+create policy "products select" on products for select
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "products insert" on products;
+create policy "products insert" on products for insert
+  with check (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "products update" on products;
+create policy "products update" on products for update
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "products delete" on products;
+create policy "products delete" on products for delete
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
 
-  -- usage_log: update (link to products, merge, edit date) and delete
-  -- (Undo, and the user-confirmed "Erase usage history" reset).
-  if not exists (select 1 from pg_policies where tablename = 'usage_log' and policyname = 'usage_log update') then
-    execute format('create policy %I on usage_log for update using (%s)', 'usage_log update', member_check);
-  end if;
-  if not exists (select 1 from pg_policies where tablename = 'usage_log' and policyname = 'usage_log delete') then
-    execute format('create policy %I on usage_log for delete using (%s)', 'usage_log delete', member_check);
-  end if;
+drop policy if exists "activity_log select" on activity_log;
+create policy "activity_log select" on activity_log for select
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "activity_log insert" on activity_log;
+create policy "activity_log insert" on activity_log for insert
+  with check (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "activity_log update" on activity_log;
+create policy "activity_log update" on activity_log for update
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "activity_log delete" on activity_log;
+create policy "activity_log delete" on activity_log for delete
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
 
-  -- shopping_list: update (check off items)
-  if not exists (select 1 from pg_policies where tablename = 'shopping_list' and policyname = 'shopping_list update') then
-    execute format('create policy %I on shopping_list for update using (%s)', 'shopping_list update', member_check);
-  end if;
-end $$;
+drop policy if exists "household_settings select" on household_settings;
+create policy "household_settings select" on household_settings for select
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "household_settings insert" on household_settings;
+create policy "household_settings insert" on household_settings for insert
+  with check (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "household_settings update" on household_settings;
+create policy "household_settings update" on household_settings for update
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "household_settings delete" on household_settings;
+create policy "household_settings delete" on household_settings for delete
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
 
--- -----------------------------------------------------------------------------
--- 7. Quick check: these counts should match the backup counts exactly.
--- -----------------------------------------------------------------------------
+-- usage_log: update (linking, merge) and delete (Undo, and the user-confirmed
+-- "Erase usage history" reset). shopping_list: update (check items off).
+drop policy if exists "usage_log update" on usage_log;
+create policy "usage_log update" on usage_log for update
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "usage_log delete" on usage_log;
+create policy "usage_log delete" on usage_log for delete
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+drop policy if exists "shopping_list update" on shopping_list;
+create policy "shopping_list update" on shopping_list for update
+  using (household_id in (select household_id from household_members where user_id = auth.uid()));
+
 commit;
 
+-- 7. Check: each now_count should equal its backup_count ---------------------
 select 'inventory_items' as table_name,
        (select count(*) from public.inventory_items) as now_count,
        (select count(*) from splooshly_backup.inventory_items_20261025) as backup_count
@@ -224,7 +212,6 @@ select 'shopping_list',
        (select count(*) from public.shopping_list),
        (select count(*) from splooshly_backup.shopping_list_20261025);
 
--- NOTE: Linking existing items to products (and merging naming variants like
--- "Boneless Chicken Breasts" -> "Boneless Chicken Breast") happens inside the
--- app the first time it opens after the update. It only fills in the new
--- product_id column and never renames or removes anything.
+-- Linking existing items to products (grouping naming variants like
+-- "Boneless Chicken Breasts" -> "Boneless Chicken Breast") happens in the app
+-- the first time it opens. It only fills in the new product_id column.
