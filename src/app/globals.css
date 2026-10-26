@@ -1,58 +1,130 @@
-@import url('https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body {
+:root {
+  --bg: #F5F7F2;
+  --surface: #FFFFFF;
+  --ink: #0E2318;
+  --muted: #5B6B62;
+  --line: #E6EBE4;
+  --divider: #EEF2EC;
+  --soft: #EEF2EC;
+  --chip: #F5F7F2;
+
+  --primary: #15803D;
+  --primary-press: #116A33;
+  --primary-tint: #E3F5E8;
+  --primary-tint-ink: #0F5A2C;
+  --accent: #C7F06B;
+  --success-bar: #22C55E;
+
+  --warn-tint: #FFF1DC;
+  --warn-ink: #8A4B06;
+  --danger: #B42318;
+  --danger-tint: #FFE8E5;
+  --danger-ink: #A3231A;
+  --info-tint: #E0F0FF;
+  --info-ink: #1D4ED8;
+
+  --on-dark: #FFFFFF;
+  --on-dark-muted: #CFE3D7;
+  --on-dark-faint: #A9C4B5;
+  --on-dark-warn: #FFC98A;
+  --on-dark-bad: #FF8A7A;
+
+  /* Set by useKeyboardInset(): height of the on-screen keyboard. */
+  --kb: 0px;
+}
+
+html,
+body {
   overscroll-behavior-y: none;
-  background: #FCFCFA;
-  font-family: 'Gabarito', system-ui, sans-serif;
-  color: #123528;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
-input, select, textarea {
-  font-size: 16px; /* prevents iOS auto-zoom on focus */
-  font-family: 'Gabarito', system-ui, sans-serif;
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
 }
 
-.pill-restock {
-  background: #FFC43D;
-  color: #123528;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 6px 13px;
-  border-radius: 999px;
-  border: none;
-  white-space: nowrap;
+/* Inputs ≥16px so iOS doesn't zoom on focus. */
+input,
+select,
+textarea {
+  font-size: 16px;
 }
 
-.pill-secondary {
-  background: none;
-  border: 1px solid #E7E5DD;
-  color: #123528;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 6px 12px;
-  border-radius: 999px;
+@layer components {
+  .d {
+    font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  .card {
+    @apply rounded-[22px] bg-surface shadow-card;
+  }
+  .eyebrow {
+    @apply m-0 text-xs font-bold uppercase tracking-[0.08em] text-muted;
+  }
+  .lbl {
+    @apply text-[13px] font-bold text-muted;
+  }
+  .fld {
+    @apply h-[54px] w-full rounded-2xl border-[1.5px] border-line bg-surface px-3.5 text-[17px] font-semibold text-ink outline-none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .fld:focus {
+    @apply border-primary;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.16);
+  }
+  select.fld {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235B6B62' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 34px;
+  }
+  .btn-primary {
+    @apply flex items-center justify-center gap-2 rounded-2xl bg-primary font-bold text-white active:bg-primary-press disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply flex items-center justify-center rounded-[14px] bg-surface font-semibold text-ink shadow-soft;
+  }
+  .chip {
+    @apply rounded-[14px] border-0 text-[15px] font-bold;
+  }
+  .chip[aria-checked='true'],
+  .chip[aria-pressed='true'] {
+    @apply bg-ink text-white;
+  }
+  .chip[aria-checked='false'],
+  .chip[aria-pressed='false'] {
+    @apply bg-chip text-ink;
+  }
+  .focus-ring:focus-visible,
+  a:focus-visible,
+  button:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
+  }
 }
 
-.section-label {
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #82806F;
-}
-
-.item-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #123528;
-}
-
-.item-meta {
-  font-size: 13px;
-  font-weight: 400;
-  color: #82806F;
+@media (prefers-reduced-motion: no-preference) {
+  .sheet-in {
+    animation: sheet-in 200ms ease-out;
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(24px);
+      opacity: 0;
+    }
+  }
 }

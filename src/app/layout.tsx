@@ -19,16 +19,18 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#17A45E",
+  themeColor: "#F5F7F2",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-paper text-deep">
+      <body className="min-h-[100dvh] bg-bg text-ink">
         <AuthProvider>
           <AuthGate>{children}</AuthGate>
         </AuthProvider>
