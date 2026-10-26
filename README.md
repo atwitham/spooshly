@@ -14,6 +14,24 @@ A kitchen and home inventory app for you and your wife, installed straight to yo
 - **Two-person login**, so only you and your wife can see or edit your household's inventory.
 - Full Splooshly branding: the real logo, Sprout green accent, Gabarito type, installs to the iPhone home screen with the Splooshly app icon.
 
+## Updating to v2 (Oct 2026 redesign) — read before deploying
+
+v2 adds canonical products, Use vs Delete, Insights with a meat runway, restock suggestions, a real shopping list, and fixes the "lb / week" unit bug. **Existing data is kept**:
+
+1. **Run the database update first.** In Supabase › SQL Editor › New query, paste all of `supabase/migrations/2026-10-25_redesign.sql` and click Run.
+   - It first copies every table into a private `splooshly_backup` schema.
+   - It only *adds* tables and columns and never deletes or overwrites existing values.
+   - It runs as one transaction and is safe to run twice.
+   - The result shows row counts next to the backup counts, and they should match.
+   - The current app keeps working after this step.
+2. **Then deploy the code** (push to `main`; Vercel redeploys).
+3. **Open the app once.** It links your existing items and usage history to products. Naming variants like "Boneless Chicken Breasts" and "Boneless Chicken Breast" are grouped, and the other spelling is kept as an alias. It only fills in the new `product_id` column.
+4. Look-alikes that aren't exact variants (e.g. "Shrimp" vs "Raw Shrimp") are *not* merged automatically. Merge them yourself in Settings › Merge duplicates.
+
+If the new code is deployed before step 1, the app shows a "One database step first" screen instead of loading. Nothing is touched until the SQL has run.
+
+Run the math tests with `npm test`.
+
 ## Cost
 
 Free for a two-person household, realistically:
