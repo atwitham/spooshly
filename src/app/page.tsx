@@ -16,7 +16,7 @@ import { CategoryIcon, CategoryTile, Spinner, StatusChip, Wordmark } from "@/com
 import UseSheet from "@/components/UseSheet";
 
 export default function HomePage() {
-  const { displayName, householdId, user } = useAuth();
+  const { displayName, householdId, user, membershipChecked } = useAuth();
   const k = useKitchen();
   const [q, setQ] = useState("");
   const [sheet, setSheet] = useState<{ pkg: InventoryItem; product: Product; reason: "cooked" | "expired" } | null>(null);
@@ -52,11 +52,14 @@ export default function HomePage() {
     return k.products.filter((p) => matchesQuery(q, p)).slice(0, 8);
   }, [q, k.products]);
 
-  if (!householdId && k.ready) {
+  if (!householdId && membershipChecked) {
     return (
       <div className="p-6 text-center text-muted">
-        <p className="mb-2 font-bold text-ink">You&apos;re signed in, but not yet in a household.</p>
-        <p>Ask whoever set up this app to add your account to the household in Supabase, then reload.</p>
+        <p className="mb-2 font-bold text-ink">You’re signed in, but not part of a kitchen yet.</p>
+        <p>
+          Ask someone in your household to invite you from Settings › Household, using the email you signed in with ({user?.email}). Then
+          close and reopen the app.
+        </p>
       </div>
     );
   }

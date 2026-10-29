@@ -653,3 +653,54 @@ export function buildCsv(data: KitchenData) {
   ];
   return [header, ...rows].map((r) => r.map(esc).join(",")).join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Household members and invites
+// ---------------------------------------------------------------------------
+export interface Person {
+  user_id: string;
+  display_name: string | null;
+  email: string | null;
+  is_me: boolean;
+}
+export interface Invite {
+  id: string;
+  household_id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+  accepted_at: string | null;
+}
+
+const needsInviteSql = (msg: string) =>
+  /household_invites|household_people|accept_household_invite|schema cache|does not exist/i.test(msg);
+
+export async function fetchHousehold(householdId: string) {
+  const [people, invites] = await Promise.all([
+    supabase.rpc("household_people"),
+    supabase.from("household_invites").select("*").eq("household_id", householdId).is("accepted_at", null).order("created_at"),
+  ]);
+  if (people.error && needsInviteSql(people.error.message)) return { ready: false as const };
+  if (people.error) throw people.error;
+  if (invites.error) throw invites.error;
+  return { ready: true as const, people: (people.data ?? []) as Person[], invites: (invites.data ?? []) as Invite[] };
+}
+
+export async function createInvite(householdId: string, email: string, name: string, userId: string | null) {
+  const clean = email.trim().toLowerCase();
+  const { error } = await supabase
+    .from("household_invites")
+    .insert({ household_id: householdId, email: clean, display_name: name.trim() || null, invited_by: userId });
+  // Already invited: that's fine, just share the link again.
+  if (error && !/duplicate|unique/i.test(error.message)) throw error;
+  return clean;
+}
+
+export async function cancelInvite(id: string) {
+  const { error } = await supabase.from("household_invites").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function inviteLink(email: string) {
+  return `${window.location.origin}/login?invite=1&email=${encodeURIComponent(email)}`;
+}

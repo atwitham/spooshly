@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Wordmark } from "@/components/ui";
 
@@ -11,6 +11,18 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [invited, setInvited] = useState(false);
+
+  // Invite links look like /login?invite=1&email=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("invite")) {
+      setInvited(true);
+      setMode("signup");
+      const em = params.get("email");
+      if (em) setEmail(em);
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,9 +33,15 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
       if (error) setError(error.message);
-      else setInfo("Account created. Check your email to confirm, then sign in. Ask Alec to add you to the household in Supabase.");
+      else if (data.session) setInfo(null); // email confirmation is off: they're signed in already
+      else
+        setInfo(
+          invited
+            ? "Account created. Check your email for a confirmation link, then come back and sign in. You’ll land right in the shared kitchen."
+            : "Account created. Check your email to confirm, then sign in. Ask someone in your household to invite this email from Settings."
+        );
     }
     setSubmitting(false);
   }
@@ -34,7 +52,15 @@ export default function LoginPage() {
         <div className="mb-3 flex justify-center">
           <Wordmark size={34} />
         </div>
-        <p className="mb-6 text-center text-[15px] text-muted">Sign in to see what’s in stock at home</p>
+        {invited ? (
+          <div className="mb-6 rounded-2xl bg-primary-tint px-4 py-3 text-center text-[15px] text-[#0F3D22]">
+            <strong>You’ve been invited to a shared kitchen.</strong>
+            <br />
+            {mode === "signup" ? "Create your account with the email the invite was sent to." : "Sign in with the email the invite was sent to."}
+          </div>
+        ) : (
+          <p className="mb-6 text-center text-[15px] text-muted">Sign in to see what’s in stock at home</p>
+        )}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input type="email" required autoComplete="email" placeholder="Email" aria-label="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="fld" />
           <input
