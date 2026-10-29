@@ -37,6 +37,7 @@ function big(base: number, kind: "weight" | "volume" | "count", displayUnit: str
 function RunwayPanel() {
   const k = useKitchen();
   const r = useMemo(() => runway(k.ctx), [k.ctx]);
+  const [showRows, setShowRows] = useState(false);
   const maxBar = Math.max(1, ...r.monthBars.map((b) => b.meals));
   const pct = (m: number) => Math.min(100, Math.max(0, (m / 8) * 100));
 
@@ -150,7 +151,24 @@ function RunwayPanel() {
       )}
 
       {r.rows.length > 0 && (
-        <div className="flex flex-col border-t border-white/[.12]">
+        <div className="rounded-2xl bg-white/[.06]">
+          <button
+            type="button"
+            aria-expanded={showRows}
+            aria-controls="runway-rows"
+            onClick={() => setShowRows((v) => !v)}
+            className="flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2.5 text-left"
+          >
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[15px] font-bold text-white">Meals left by product</span>
+              <span className="text-xs text-on-dark-faint">
+                Portion size, meals on hand and how long each lasts · {r.rows.length} product{r.rows.length === 1 ? "" : "s"}
+              </span>
+            </span>
+            <ChevronDown size={20} className="flex-none text-on-dark-faint transition-transform" style={{ transform: showRows ? "rotate(180deg)" : "none" }} aria-hidden />
+          </button>
+          {showRows && (
+            <div id="runway-rows" className="flex flex-col border-t border-white/[.12] px-3.5">
           {r.rows.map((row, i) => (
             <div key={row.product.id} className={`flex items-center gap-2.5 py-[11px] ${i < r.rows.length - 1 ? "border-b border-white/[.08]" : ""}`}>
               <span className="flex min-w-0 flex-1 flex-col">
@@ -168,6 +186,8 @@ function RunwayPanel() {
               </span>
             </div>
           ))}
+            </div>
+          )}
         </div>
       )}
 

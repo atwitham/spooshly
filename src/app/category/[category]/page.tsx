@@ -15,6 +15,7 @@ import { daysUntil, expiryChip, fmtDay, fmtMonth } from "@/lib/dates";
 import { BackButton, CategoryIcon, CategoryTile, Spinner } from "@/components/ui";
 import PackageMenu from "@/components/PackageMenu";
 import UseSheet from "@/components/UseSheet";
+import FreezerSpace from "@/components/FreezerSpace";
 
 type Sort = "expiring" | "newest" | "az";
 const PREVIEW = 5;
@@ -79,11 +80,12 @@ function CategoryView() {
     });
   }, [k.packages, k, category, q, sort]);
 
-  // Expand the requested product (from search) or the first group.
+  // Everything starts collapsed. Only a product you jumped to (from search
+  // or right after adding it) opens.
   const initial = search.get("open");
   useEffect(() => {
-    if (!k.ready || groups.length === 0) return;
-    setOpen((o) => (Object.keys(o).length ? o : { [initial ?? groups[0].product.id]: true }));
+    if (!k.ready || groups.length === 0 || !initial) return;
+    setOpen((o) => (Object.keys(o).length ? o : { [initial]: true }));
     if (initial) setTimeout(() => document.getElementById(`product-${initial}`)?.scrollIntoView({ block: "start" }), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [k.ready, groups.length > 0]);
@@ -164,6 +166,8 @@ function CategoryView() {
             </button>
           ))}
         </div>
+
+        {k.ready && category === "meat" && !q && <FreezerSpace compact />}
 
         {!k.ready ? (
           <Spinner />

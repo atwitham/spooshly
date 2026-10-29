@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabaseClient";
 import type { HouseholdSettings } from "@/lib/types";
 import { downloadCsv } from "@/lib/download";
 import { BackButton } from "@/components/ui";
+import FreezerSpace from "@/components/FreezerSpace";
 
 const row = "flex min-h-[60px] items-center gap-3.5 border-t border-divider px-4 py-2.5 first:border-t-0";
 const ico = "flex h-9 w-9 flex-none items-center justify-center rounded-xl";
@@ -99,6 +100,8 @@ export default function SettingsPage() {
             </label>
           </div>
         </section>
+
+        <FreezerSpace />
 
         <section aria-labelledby="data-h" className="flex flex-col gap-2">
           <h2 id="data-h" className="eyebrow">

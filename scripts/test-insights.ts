@@ -200,3 +200,12 @@ test("normalization: variants collapse, similar detection", () => {
   const withShrimp = [...products, product("s2", "Shrimp")];
   assert.equal(duplicatePairs(withShrimp).length, 1);
 });
+
+test("freezer space caps meat buy suggestions", () => {
+  const ctx = sampleCtx();
+  const used = ctx.packages.filter((p) => p.category === "meat").reduce((s, p) => s + toBase(p.quantity, p.unit), 0);
+  ctx.settings = { ...settings, freezer_capacity_g: used }; // packed full
+  assert.equal(recommendations(ctx).find((r) => r.product.id === "turkey" && r.type === "buy"), undefined);
+  ctx.settings = { ...settings, freezer_capacity_g: used + toBase(2, "lb") }; // 2 lb of room
+  assert.equal(recommendations(ctx).find((r) => r.product.id === "turkey")?.qtyLabel, "1 lb");
+});

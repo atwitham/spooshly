@@ -125,6 +125,8 @@ export interface HouseholdSettings {
   low_stock_warn_weeks: 1 | 2;
   expiry_reminder_days: 3 | 7;
   last_trip_at: string | null;
+  /** How much fits in the freezer, in grams. null = not set. */
+  freezer_capacity_g?: number | null;
 }
 
 export const DEFAULT_SETTINGS: Omit<HouseholdSettings, "household_id"> = {
