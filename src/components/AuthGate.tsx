@@ -45,12 +45,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  const isJoinPage = pathname.startsWith("/join/");
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || isJoinPage) return;
     if (!user && !isLoginPage) router.replace("/login");
     if (user && isLoginPage) router.replace("/");
-  }, [user, loading, isLoginPage, router]);
+  }, [user, loading, isLoginPage, isJoinPage, router]);
+
+  // Invite pages work whether or not someone is signed in on this phone.
+  if (isJoinPage) return <>{children}</>;
 
   if (loading) {
     return <div className="flex h-[100dvh] items-center justify-center text-primary">Loading…</div>;

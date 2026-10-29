@@ -670,6 +670,7 @@ export interface Invite {
   display_name: string | null;
   created_at: string;
   accepted_at: string | null;
+  token: string;
 }
 
 const needsInviteSql = (msg: string) =>
@@ -688,12 +689,23 @@ export async function fetchHousehold(householdId: string) {
 
 export async function createInvite(householdId: string, email: string, name: string, userId: string | null) {
   const clean = email.trim().toLowerCase();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("household_invites")
-    .insert({ household_id: householdId, email: clean, display_name: name.trim() || null, invited_by: userId });
-  // Already invited: that's fine, just share the link again.
-  if (error && !/duplicate|unique/i.test(error.message)) throw error;
-  return clean;
+    .insert({ household_id: householdId, email: clean, display_name: name.trim() || null, invited_by: userId })
+    .select("token")
+    .single();
+  if (!error) return { email: clean, token: data.token as string };
+  // Already invited: reuse that invite's link.
+  if (!/duplicate|unique/i.test(error.message)) throw error;
+  const { data: existing, error: e2 } = await supabase
+    .from("household_invites")
+    .select("token")
+    .eq("household_id", householdId)
+    .ilike("email", clean)
+    .is("accepted_at", null)
+    .single();
+  if (e2) throw e2;
+  return { email: clean, token: existing.token as string };
 }
 
 export async function cancelInvite(id: string) {
@@ -701,6 +713,6 @@ export async function cancelInvite(id: string) {
   if (error) throw error;
 }
 
-export function inviteLink(email: string) {
-  return `${window.location.origin}/login?invite=1&email=${encodeURIComponent(email)}`;
+export function inviteLink(token: string) {
+  return `${window.location.origin}/join/${token}`;
 }
