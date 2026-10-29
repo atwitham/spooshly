@@ -562,8 +562,17 @@ export async function mergeProducts(survivor: Product, loser: Product, userId: s
 // Settings
 // ---------------------------------------------------------------------------
 export async function saveSettings(s: HouseholdSettings) {
-  const { error } = await supabase.from("household_settings").upsert({ ...s, updated_at: new Date().toISOString() });
-  if (error) throw error;
+  // Before the freezer-space column exists, the loaded settings won't have
+  // the field at all; leave it out so other settings still save.
+  const { freezer_capacity_g, ...rest } = s;
+  const payload = freezer_capacity_g === undefined ? rest : { ...rest, freezer_capacity_g };
+  const { error } = await supabase.from("household_settings").upsert({ ...payload, updated_at: new Date().toISOString() });
+  if (error) {
+    if (/freezer_capacity_g/.test(error.message)) {
+      throw new Error("Freezer space needs a quick database update first (supabase/migrations/2026-10-29_freezer_space.sql).");
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------

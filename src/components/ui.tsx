@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Logo from "./Logo";
 import { ArrowLeft, Bath, Box, Droplet, FlaskConical, Package as PackageIcon, Sprout } from "lucide-react";
 import { type Category, categoryMeta } from "@/lib/types";
 
@@ -49,19 +50,11 @@ export function CategoryTile({ category, size = 44, radius = 14, icon = true }: 
   );
 }
 
-/** "Spl" + two eyes + "shly". */
-export function Wordmark({ size = 28 }: { size?: number }) {
-  const s = size / 28;
+/** The original Splooshly wordmark (brand SVG), linked to Home. */
+export function Wordmark({ size = 34 }: { size?: number }) {
   return (
-    <Link href="/" aria-label="Splooshly home" className="d flex items-center font-extrabold text-ink no-underline" style={{ fontSize: size }}>
-      <span aria-hidden>Spl</span>
-      <svg aria-hidden width={38 * s} height={22 * s} viewBox="0 0 38 22" style={{ margin: `${2 * s}px ${1 * s}px 0` }}>
-        <circle cx="10" cy="12" r="8" fill="#FFFFFF" stroke="#15803D" strokeWidth="3.2" />
-        <circle cx="28" cy="12" r="8" fill="#FFFFFF" stroke="#15803D" strokeWidth="3.2" />
-        <circle cx="12" cy="14" r="3" fill="#0E2318" />
-        <circle cx="30" cy="14" r="3" fill="#0E2318" />
-      </svg>
-      <span aria-hidden>shly</span>
+    <Link href="/" aria-label="Splooshly home" className="flex items-center">
+      <Logo height={size} />
     </Link>
   );
 }

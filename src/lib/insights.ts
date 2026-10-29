@@ -27,7 +27,9 @@ export interface Ctx {
   products: Product[];
   packages: Package[];
   events: UsageLogEntry[];
-  settings: Pick<HouseholdSettings, "shop_every_days" | "target_supply_weeks" | "low_stock_warn_weeks" | "expiry_reminder_days">;
+  settings: Pick<HouseholdSettings, "shop_every_days" | "target_supply_weeks" | "low_stock_warn_weeks" | "expiry_reminder_days"> & {
+    freezer_capacity_g?: number | null;
+  };
   now?: Date;
 }
 
@@ -210,6 +212,19 @@ export function usageSeries(ctx: Ctx, category: Category, w: Window): { bars: Ba
 }
 
 // ---------------------------------------------------------------------------
+// Freezer space
+// ---------------------------------------------------------------------------
+/** Packages that take up freezer room: Meat & Frozen, or anything stored in the freezer. */
+export const inFreezer = (p: Package) => (p.category === "meat" || p.storage === "freezer") && unitKind(p.unit) === "weight";
+
+export function freezerSpace(ctx: Ctx) {
+  const used = ctx.packages.filter(inFreezer).reduce((s, p) => s + packageBase(p), 0);
+  const capacity = ctx.settings.freezer_capacity_g ?? null;
+  if (!capacity || capacity <= 0) return { used, capacity: null, pct: null, room: null };
+  return { used, capacity, pct: used / capacity, room: Math.max(0, capacity - used) };
+}
+
+// ---------------------------------------------------------------------------
 // Restock recommendations (§6.3)
 // ---------------------------------------------------------------------------
 export interface Recommendation {
@@ -258,6 +273,9 @@ export function recommendations(ctx: Ctx, w = periodWindow(1, ctx.now), category
   const out: Recommendation[] = [];
   const products = category ? ctx.products.filter((p) => p.category === category) : ctx.products;
 
+  // Remaining freezer room, shared across all freezer buy suggestions.
+  let room = freezerSpace(ctx).room;
+
   for (const p of products) {
     const { pace } = simplePace(p, ctx, w);
     const onHand = onHandBase(p, ctx.packages);
@@ -302,7 +320,18 @@ export function recommendations(ctx: Ctx, w = periodWindow(1, ctx.now), category
     if (needs) {
       const size = packageSizeBase(p, ctx.packages);
       const want = Math.max(0, s.target_supply_weeks * pace - onHand);
-      const qty = Math.max(size, Math.ceil(want / size - 1e-9) * size);
+      let qty = Math.max(size, Math.ceil(want / size - 1e-9) * size);
+      const goesInFreezer = p.category === "meat" && p.unit_kind === "weight";
+      let capped = false;
+      if (goesInFreezer && room !== null) {
+        const fits = Math.floor(room / size + 1e-9) * size;
+        if (fits <= 0) continue; // freezer is full: don't suggest buying more
+        if (fits < qty) {
+          qty = fits;
+          capped = true;
+        }
+        room -= qty;
+      }
       const label = qtyLabel(p, qty);
       const outBy = new Date(now.getTime() + weeksLeft * WEEK);
       out.push({
@@ -310,9 +339,10 @@ export function recommendations(ctx: Ctx, w = periodWindow(1, ctx.now), category
         product: p,
         title: `Buy ${p.name} · ${label}`,
         reason:
-          onHand <= 0
+          (onHand <= 0
             ? `Out. At ~${paceLabel(p, pace)}, ${label} covers your ${s.target_supply_weeks}-week target.`
-            : `~${fmtNum(weeksLeft)} weeks left at your pace. ${label} brings you to ${s.target_supply_weeks} weeks.`,
+            : `~${fmtNum(weeksLeft)} weeks left at your pace. ${label} brings you to ${s.target_supply_weeks} weeks.`) +
+          (capped ? " Limited to what fits in your freezer." : ""),
         shortLead: onHand <= 0 ? "Out" : `~${Math.max(1, Math.round(weeksLeft))} wk${Math.round(weeksLeft) === 1 ? "" : "s"} left`,
         short: onHand <= 0 ? `~${paceLabel(p, pace)}` : `out by ${fmtDay(outBy)}`,
         qtyLabel: label,
