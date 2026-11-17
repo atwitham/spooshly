@@ -121,34 +121,28 @@ export function KitchenProvider({ children }: { children: React.ReactNode }) {
     <KitchenContext.Provider value={value}>
       {children}
       {toastState && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-x-4 z-[60] mx-auto flex max-w-md items-center gap-2.5 rounded-[18px] bg-ink px-4 py-3.5 text-[15px] text-white shadow-toast"
-          style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}
-        >
-          <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-accent text-ink">
-            <Check size={16} strokeWidth={3} aria-hidden />
-          </span>
-          <span className="flex-1">{toastState.message}</span>
-          {toastState.undo && (
-            <button
-              type="button"
-              className="h-9 px-2 text-[15px] font-bold text-accent"
-              onClick={async () => {
-                const undo = toastState.undo!;
-                setToast(null);
-                try {
-                  await undo();
-                } finally {
-                  await reload();
+        <SwipeToast
+          key={toastState.id}
+          message={toastState.message}
+          onDismiss={() => {
+            clearTimeout(timer.current);
+            setToast(null);
+          }}
+          onUndo={
+            toastState.undo
+              ? async () => {
+                  const undo = toastState.undo!;
+                  clearTimeout(timer.current);
+                  setToast(null);
+                  try {
+                    await undo();
+                  } finally {
+                    await reload();
+                  }
                 }
-              }}
-            >
-              Undo
-            </button>
-          )}
-        </div>
+              : undefined
+          }
+        />
       )}
     </KitchenContext.Provider>
   );
@@ -158,4 +152,74 @@ export function useKitchen() {
   const v = useContext(KitchenContext);
   if (!v) throw new Error("useKitchen must be used inside KitchenProvider");
   return v;
+}
+
+/**
+ * The drop-down notification. Swipe it up to dismiss: it follows your
+ * finger, and a flick or a drag past ~40px sends it off the top. Taps on
+ * Undo still work; small drags snap back.
+ */
+function SwipeToast({ message, onDismiss, onUndo }: { message: string; onDismiss: () => void; onUndo?: () => void }) {
+  const [dy, setDy] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+  const start = useRef<{ y: number; t: number; dragging: boolean } | null>(null);
+
+  const dismiss = () => {
+    setLeaving(true);
+    setTimeout(onDismiss, 180);
+  };
+
+  function onPointerDown(e: React.PointerEvent) {
+    start.current = { y: e.clientY, t: performance.now(), dragging: false };
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    const s = start.current;
+    if (!s) return;
+    const d = e.clientY - s.y;
+    if (!s.dragging && Math.abs(d) < 6) return; // still a tap
+    if (!s.dragging) {
+      s.dragging = true;
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+    // Follows the finger upward; resists being pulled down.
+    setDy(d < 0 ? d : d * 0.25);
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    const s = start.current;
+    start.current = null;
+    if (!s?.dragging) return;
+    const d = e.clientY - s.y;
+    const velocity = d / Math.max(1, performance.now() - s.t); // px per ms
+    if (d < -40 || velocity < -0.5) dismiss();
+    else setDy(0);
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => ((start.current = null), setDy(0))}
+      className="fixed inset-x-4 z-[60] mx-auto flex max-w-md touch-none select-none items-center gap-2.5 rounded-[18px] bg-ink px-4 py-3.5 text-[15px] text-white shadow-toast"
+      style={{
+        top: "calc(env(safe-area-inset-top) + 12px)",
+        transform: leaving ? "translateY(calc(-100% - 40px))" : `translateY(${dy}px)`,
+        opacity: leaving ? 0 : 1 - Math.min(0.6, Math.abs(Math.min(0, dy)) / 150),
+        transition: start.current?.dragging ? "none" : "transform 180ms ease-out, opacity 180ms ease-out",
+      }}
+    >
+      <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-accent text-ink">
+        <Check size={16} strokeWidth={3} aria-hidden />
+      </span>
+      <span className="flex-1">{message}</span>
+      {onUndo && (
+        <button type="button" className="h-9 px-2 text-[15px] font-bold text-accent" onClick={onUndo}>
+          Undo
+        </button>
+      )}
+      <span aria-hidden className="absolute bottom-1 left-1/2 h-1 w-8 -translate-x-1/2 rounded-full bg-white/25" />
+    </div>
+  );
 }
