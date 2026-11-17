@@ -8,11 +8,14 @@ import { Copy, MoreHorizontal, Pencil, Trash2, Trash } from "lucide-react";
 export default function PackageMenu({
   label,
   editHref,
+  onNavigate,
   onDuplicate,
   onToss,
 }: {
   label: string;
   editHref: string;
+  /** Called right before opening the edit screen (to remember your place). */
+  onNavigate?: () => void;
   onDuplicate: () => void;
   onToss: () => void;
 }) {
@@ -51,7 +54,7 @@ export default function PackageMenu({
       </button>
       {open && (
         <div role="menu" aria-label="Package actions" className="absolute right-0 top-12 z-40 flex w-[232px] flex-col rounded-[18px] bg-surface p-1.5 shadow-menu">
-          <Link role="menuitem" href={editHref} className={item}>
+          <Link role="menuitem" href={editHref} onClick={onNavigate} className={item}>
             <Pencil size={20} strokeWidth={1.9} aria-hidden />
             Edit package
           </Link>
@@ -64,7 +67,7 @@ export default function PackageMenu({
             Toss (log as waste)
           </button>
           <div className="mx-2 my-1 h-px bg-divider" />
-          <Link role="menuitem" href={`${editHref}?delete=1`} className={`${item} !text-danger-ink`}>
+          <Link role="menuitem" href={`${editHref}?delete=1`} onClick={onNavigate} className={`${item} !text-danger-ink`}>
             <Trash2 size={20} strokeWidth={1.9} aria-hidden />
             Delete entry
           </Link>

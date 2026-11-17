@@ -38,7 +38,9 @@ function ProductForm({ product }: { product: Product }) {
       await renameProduct(product, name, category, user?.id ?? null);
       await k.reload();
       k.toast(moving ? `Moved ${name.trim()} to ${categoryMeta(category).label}` : `Renamed to ${name.trim()}`);
-      router.replace(`/category/${category}?open=${product.id}`);
+      // Go back to exactly where you were (same tab, filters and scroll).
+      if (window.history.length > 1) router.back();
+      else router.replace(`/category/${product.category}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn’t save.");
       setBusy(false);
