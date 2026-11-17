@@ -11,22 +11,14 @@ const hints = new Map<DecodeHintType, unknown>([
   [DecodeHintType.TRY_HARDER, true],
 ]);
 
-type FocusCaps = MediaTrackCapabilities & {
-  focusMode?: string[];
-  torch?: boolean;
-  pointsOfInterest?: unknown;
-  zoom?: { min: number; max: number; step?: number };
-};
+type FocusCaps = MediaTrackCapabilities & { focusMode?: string[]; torch?: boolean; pointsOfInterest?: unknown };
 
 /**
  * Live barcode scanner.
  * - Asks for a high-resolution back camera (the default 640×480 stream is
  *   too blurry up close, which is what made it seem "stuck").
- * - Turns on continuous autofocus where the phone allows it; tap to refocus
- *   (iPhone Safari doesn't let websites set a focus point).
- * - Pinch or 1×/2×/3× to zoom, where the phone exposes camera zoom.
- * - "Use iPhone camera" opens the phone's own camera, with all its controls
- *   (tap to focus, zoom, macro), which focuses
+ * - Turns on continuous autofocus where the phone allows it; tap to refocus.
+ * - "Take a photo instead" opens the phone's own camera app, which focuses
  *   normally, and reads the barcode from that photo.
  * - Always fully releases the camera on close.
  */
@@ -39,11 +31,6 @@ export default function BarcodeScanner({ onDetected, onClose }: { onDetected: (c
   const [status, setStatus] = useState<"starting" | "scanning" | "no-camera" | "reading-photo">("starting");
   const [slow, setSlow] = useState(false);
   const [torch, setTorch] = useState<boolean | null>(null);
-  // Hardware zoom, when the phone lets websites control it (newer iOS, most Android).
-  const [zoomRange, setZoomRange] = useState<{ min: number; max: number } | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [canFocus, setCanFocus] = useState(false);
-  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const stopCamera = useCallback(() => {
@@ -89,12 +76,6 @@ export default function BarcodeScanner({ onDetected, onClose }: { onDetected: (c
           await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => {});
         }
         if (caps.torch) setTorch(false);
-        if (caps.zoom && caps.zoom.max > caps.zoom.min) {
-          const settings = track.getSettings() as MediaTrackSettings & { zoom?: number };
-          setZoomRange({ min: caps.zoom.min, max: Math.min(caps.zoom.max, 10) });
-          setZoom(settings.zoom ?? caps.zoom.min);
-        }
-        setCanFocus(!!caps.focusMode?.some((m) => m === "single-shot" || m === "continuous") || !!caps.pointsOfInterest);
         controlsRef.current = await reader.decodeFromStream(stream, videoRef.current!, (result) => {
           if (result) finish(result.getText());
         });
@@ -111,41 +92,7 @@ export default function BarcodeScanner({ onDetected, onClose }: { onDetected: (c
     };
   }, [finish, stopCamera]);
 
-  async function applyZoom(z: number) {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track || !zoomRange) return;
-    const next = Math.min(zoomRange.max, Math.max(zoomRange.min, Math.round(z * 10) / 10));
-    setZoom(next);
-    await track.applyConstraints({ advanced: [{ zoom: next } as MediaTrackConstraintSet] }).catch(() => {});
-  }
-
-  const touchDist = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-  function onTouchStart(e: React.TouchEvent) {
-    if (e.touches.length === 2 && zoomRange) pinchRef.current = { dist: touchDist(e.touches), zoom };
-  }
-  function onTouchMove(e: React.TouchEvent) {
-    if (e.touches.length === 2 && pinchRef.current) {
-      e.preventDefault();
-      applyZoom(pinchRef.current.zoom * (touchDist(e.touches) / pinchRef.current.dist));
-    }
-  }
-  function onTouchEnd() {
-    pinchRef.current = null;
-  }
-
-  async function refocus(e?: React.MouseEvent<HTMLDivElement>) {
-    // Where supported (mostly Android), focus on the spot you tapped.
-    const track = streamRef.current?.getVideoTracks()[0];
-    const caps = (track?.getCapabilities?.() ?? {}) as FocusCaps;
-    if (track && caps.pointsOfInterest && e) {
-      const r = e.currentTarget.getBoundingClientRect();
-      const point = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
-      await track.applyConstraints({ advanced: [{ pointsOfInterest: [point] } as unknown as MediaTrackConstraintSet] }).catch(() => {});
-    }
-    return refocusMode();
-  }
-
-  async function refocusMode() {
+  async function refocus() {
     const track = streamRef.current?.getVideoTracks()[0];
     const caps = (track?.getCapabilities?.() ?? {}) as FocusCaps;
     if (!track || !caps.focusMode) return;
@@ -200,22 +147,12 @@ export default function BarcodeScanner({ onDetected, onClose }: { onDetected: (c
         </button>
       </div>
 
-      <div
-        className="relative min-h-0 flex-1 touch-none overflow-hidden"
-        onClick={refocus}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-      >
+      <div className="relative min-h-0 flex-1" onClick={refocus}>
         <video ref={videoRef} className="h-full w-full object-cover" muted playsInline autoPlay />
         {status === "scanning" && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
             <div className="h-36 w-72 rounded-2xl border-[3px] border-[#C7F06B] shadow-[0_0_0_9999px_rgba(0,0,0,.35)]" />
-            <p className="m-0 max-w-[85%] rounded-2xl bg-black/55 px-3.5 py-1.5 text-center text-[13px] leading-snug">
-              Hold 4–6 inches away
-              {zoomRange || canFocus ? <br /> : null}
-              {[zoomRange ? "Pinch to zoom" : null, canFocus ? "tap to focus" : null].filter(Boolean).join(" · ")}
-            </p>
+            <p className="m-0 rounded-full bg-black/50 px-3 py-1.5 text-[13px]">Hold steady about 6 inches away · tap to focus</p>
           </div>
         )}
         {status === "starting" && <p className="absolute inset-0 m-0 flex items-center justify-center text-sm text-white/70">Starting camera…</p>}
@@ -229,31 +166,7 @@ export default function BarcodeScanner({ onDetected, onClose }: { onDetected: (c
       </div>
 
       <div className="flex flex-col gap-2.5 px-4 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
-        {zoomRange && status === "scanning" && (
-          <div role="group" aria-label="Zoom" className="flex items-center justify-center gap-2">
-            {[1, 2, 3].filter((z) => z * zoomRange.min <= zoomRange.max).map((z) => {
-              const target = z * zoomRange.min;
-              const on = Math.abs(zoom - target) < 0.25;
-              return (
-                <button
-                  key={z}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => applyZoom(target)}
-                  className={`h-11 min-w-[52px] rounded-full px-3 text-[15px] font-bold ${on ? "bg-white text-black" : "bg-white/15 text-white"}`}
-                >
-                  {z}×
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {status === "scanning" && (
-          <p className="m-0 text-center text-[13px] text-white/75">
-            {slow ? "Having trouble? " : ""}
-            {canFocus ? "Need more control? " : "Need tap-to-focus? "}Use your iPhone camera below, then the app reads the photo.
-          </p>
-        )}
+        {slow && status === "scanning" && <p className="m-0 text-center text-[13px] text-white/75">Having trouble? Use your phone’s camera instead.</p>}
         <div className="flex gap-2.5">
           <button
             type="button"
@@ -261,7 +174,7 @@ export default function BarcodeScanner({ onDetected, onClose }: { onDetected: (c
             className="flex h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-[#C7F06B] text-base font-extrabold text-[#0E2318]"
           >
             <Camera size={20} aria-hidden />
-            Use iPhone camera
+            Take a photo instead
           </button>
           {torch !== null && (
             <button
