@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/lib/AuthProvider";
 import { KitchenProvider, useKitchen } from "@/lib/KitchenProvider";
 import NavBar from "./NavBar";
+import PullToRefresh from "./PullToRefresh";
 
 // Full-screen routes: forms with a pinned action bar, no floating nav.
 const FULL_SCREEN = [/^\/add/, /^\/package\//, /^\/product\//, /^\/settings\/reset/];
@@ -24,7 +25,7 @@ function NeedsMigration() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { needsMigration, error, ready } = useKitchen();
+  const { needsMigration, error, ready, reload } = useKitchen();
   const full = FULL_SCREEN.some((r) => r.test(pathname));
   if (needsMigration) return <NeedsMigration />;
   return (
@@ -34,6 +35,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {error}
         </div>
       )}
+      {!full && <PullToRefresh onRefresh={reload} />}
       {children}
       {!full && <NavBar />}
     </div>
@@ -45,12 +47,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  // Opened from a "reset your password" email: works signed in or not.
+  const isResetPage = pathname === "/reset-password";
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || isResetPage) return;
     if (!user && !isLoginPage) router.replace("/login");
     if (user && isLoginPage) router.replace("/");
-  }, [user, loading, isLoginPage, router]);
+  }, [user, loading, isLoginPage, isResetPage, router]);
+
+  if (isResetPage) return <>{children}</>;
 
   if (loading) {
     return <div className="flex h-[100dvh] items-center justify-center text-primary">Loading…</div>;
