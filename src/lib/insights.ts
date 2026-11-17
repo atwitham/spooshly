@@ -215,7 +215,9 @@ export function usageSeries(ctx: Ctx, category: Category, w: Window): { bars: Ba
 // Freezer space
 // ---------------------------------------------------------------------------
 /** Packages that take up freezer room: Meat & Frozen, or anything stored in the freezer. */
-export const inFreezer = (p: Package) => (p.category === "meat" || p.storage === "freezer") && unitKind(p.unit) === "weight";
+/** Packages taking freezer room: Meat & Frozen, or anything kept in either freezer. */
+export const inFreezer = (p: Package) =>
+  (p.category === "meat" || p.storage === "freezer" || p.storage === "garage_freezer") && unitKind(p.unit) === "weight";
 
 export function freezerSpace(ctx: Ctx) {
   const used = ctx.packages.filter(inFreezer).reduce((s, p) => s + packageBase(p), 0);

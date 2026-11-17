@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Barcode, Camera, Check } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
 import { useKitchen } from "@/lib/KitchenProvider";
-import { addPackages } from "@/lib/db";
+import { addPackages, renameProduct } from "@/lib/db";
 import { lookupBarcode } from "@/lib/barcodeLookup";
 import { fileToDataUrl, uploadItemPhoto } from "@/lib/storage";
 import { findExact, isSimilar, suggest } from "@/lib/normalize";
-import { CATEGORIES, type Category, type Product, type Unit, UNITS, categoryMeta } from "@/lib/types";
+import { CATEGORIES, type Category, type Product, type StorageLocation, type Unit, STORAGE_LABEL, UNITS, categoryMeta, storageOptions } from "@/lib/types";
 import { fmtNum, fromBase, unitKind } from "@/lib/units";
 import { addDaysISO, todayISO } from "@/lib/dates";
-import { FullScreen, centerOnFocus, enterToNext } from "@/components/ui";
+import { ChoiceChips, FullScreen, centerOnFocus, enterToNext } from "@/components/ui";
 import ProductCombobox from "@/components/ProductCombobox";
 import BarcodeScanner from "@/components/BarcodeScanner";
 
@@ -38,6 +38,7 @@ function AddForm() {
   const [chosen, setChosen] = useState<Product | null>(null);
   const [createdNew, setCreatedNew] = useState(false);
   const [category, setCategory] = useState<Category>(startCat);
+  const [storage, setStorage] = useState<StorageLocation | null>(storageOptions(startCat)[0]);
   const [size, setSize] = useState("");
   const [unit, setUnit] = useState<Unit>(defaultUnit(startCat));
   const [count, setCount] = useState(1);
@@ -68,10 +69,23 @@ function AddForm() {
   const shelfDays = target?.default_shelf_life_days ?? categoryMeta(category).shelfLifeDays;
   const inStock = target ? k.packages.filter((p) => p.product_id === target.id).length : 0;
 
+  /** Where this goes by default: wherever the last package of it went, else the category's usual spot. */
+  function defaultStorage(cat: Category, p?: Product | null): StorageLocation | null {
+    const opts = storageOptions(cat);
+    if (p) {
+      const last = k.packages
+        .filter((x) => x.product_id === p.id && x.storage && opts.includes(x.storage))
+        .sort((a, b) => ((a.added_at ?? a.created_at) < (b.added_at ?? b.created_at) ? 1 : -1))[0];
+      if (last?.storage) return last.storage;
+    }
+    return cat === "meat" || cat === "oil" ? opts[0] : null;
+  }
+
   function applyProduct(p: Product) {
     setChosen(p);
     setQuery(p.name);
     setCategory(p.category);
+    setStorage(defaultStorage(p.category, p));
     setUnit(p.display_unit);
     if (p.default_package_size) setSize(fmtNum(fromBase(p.default_package_size, p.display_unit)));
     const days = p.default_shelf_life_days ?? categoryMeta(p.category).shelfLifeDays;
@@ -80,6 +94,7 @@ function AddForm() {
 
   function changeCategory(c: Category) {
     setCategory(c);
+    setStorage(defaultStorage(c, target));
     if (!target) {
       setUnit(defaultUnit(c));
       const days = categoryMeta(c).shelfLifeDays;
@@ -123,6 +138,18 @@ function AddForm() {
     }
   }
 
+  useEffect(() => {
+    if (exact && !(chosen && chosen.id === exact.id)) {
+      setCategory(exact.category);
+      setStorage(defaultStorage(exact.category, exact));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exact?.id]);
+
+  const moving = !!target && category !== target.category;
+  const targetCount = target ? k.packages.filter((p) => p.product_id === target.id).length : 0;
+  const showStorage = category === "meat" || category === "oil";
+
   const sizeNum = Number(size.replace(",", "."));
   const canSave = !!householdId && !!finalName && sizeNum > 0 && !saving;
 
@@ -136,10 +163,15 @@ function AddForm() {
     setErr(null);
     try {
       const photoUrl = photo ? await uploadItemPhoto(photo, householdId!) : null;
+      let product = target;
+      if (target && moving) {
+        await renameProduct(target, target.name, category, user?.id ?? null);
+        product = { ...target, category, is_meat: category === "meat" };
+      }
       const res = await addPackages({
         householdId: householdId!,
         userId: user?.id ?? null,
-        product: target,
+        product,
         typedName: query,
         category,
         size: sizeNum,
@@ -150,6 +182,7 @@ function AddForm() {
         source,
         barcode,
         photoUrl,
+        storage: showStorage ? storage : null,
       });
       await k.reload();
       k.toast(`Added ${count} × ${res.product.name}`, res.undo);
@@ -247,15 +280,33 @@ function AddForm() {
           <label htmlFor="cat-in" className="lbl">
             Category
           </label>
-          <select id="cat-in" className="fld" value={category} onChange={(e) => changeCategory(e.target.value as Category)} disabled={!!target}>
+          <select id="cat-in" className="fld" value={category} onChange={(e) => changeCategory(e.target.value as Category)}>
             {CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
               </option>
             ))}
           </select>
-          {target && <span className="text-xs text-muted">Set by {target.name}. Change it in Settings › Product names.</span>}
+          {moving && target && (
+            <span role="status" className="rounded-xl bg-warn-tint px-3 py-2 text-[13px] leading-snug text-[#5C2A04]">
+              Saving moves <strong>{target.name}</strong>
+              {targetCount > 0 ? ` and its ${targetCount} package${targetCount === 1 ? "" : "s"}` : ""} from {categoryMeta(target.category).label} to{" "}
+              {categoryMeta(category).label}. It’ll be suggested there from now on.
+            </span>
+          )}
         </div>
+
+        {showStorage && (
+          <div className="flex flex-col gap-1.5">
+            <span className="lbl">Where will it go?</span>
+            <ChoiceChips<StorageLocation>
+              label="Where will it go?"
+              value={(storage ?? storageOptions(category)[0]) as StorageLocation}
+              onChange={setStorage}
+              options={storageOptions(category).map((v) => ({ value: v, label: STORAGE_LABEL[v] }))}
+            />
+        </div>
+        )}
 
         <div className="grid grid-cols-3 gap-2.5">
           <label className="flex flex-col gap-1.5">

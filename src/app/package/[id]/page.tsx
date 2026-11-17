@@ -1,18 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
 import { useKitchen } from "@/lib/KitchenProvider";
 import { deletePackage, editPackage, ensureProduct, fetchActivity } from "@/lib/db";
-import { type ActivityEntry, type InventoryItem, type Product, type Unit, UNITS } from "@/lib/types";
+import { type ActivityEntry, type InventoryItem, type Product, type StorageLocation, type Unit, STORAGE_LABEL, UNITS, locationOf, storageOptions } from "@/lib/types";
 import { fmtNum, formatStored, unitKind } from "@/lib/units";
 import { daysUntil, fmtDay, todayISO } from "@/lib/dates";
 import { CategoryTile, ChoiceChips, FullScreen, Spinner, centerOnFocus, enterToNext } from "@/components/ui";
 import ProductCombobox from "@/components/ProductCombobox";
 
-type Storage = "freezer" | "fridge" | "pantry";
 
 function historyLine(pkg: InventoryItem, entries: ActivityEntry[]) {
   const parts: string[] = [];
@@ -42,7 +42,7 @@ function EditForm({ pkg }: { pkg: InventoryItem }) {
   const [unit, setUnit] = useState<Unit>(pkg.unit);
   const [expires, setExpires] = useState(pkg.expiration_date ?? "");
   const [addedAt, setAddedAt] = useState(pkg.added_at ?? pkg.created_at.slice(0, 10));
-  const [storage, setStorage] = useState<Storage | "">(pkg.storage ?? "");
+  const [storage, setStorage] = useState<StorageLocation | "">(locationOf(pkg) ?? "");
   const [confirm, setConfirm] = useState(params.get("delete") === "1");
   const [history, setHistory] = useState<ActivityEntry[]>([]);
   const [busy, setBusy] = useState(false);
@@ -122,6 +122,11 @@ function EditForm({ pkg }: { pkg: InventoryItem }) {
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="lbl">Product</span>
             <span className="d text-lg font-bold">{product?.name ?? pkg.name}</span>
+            {product && (
+              <Link href={`/product/${product.id}`} className="text-[13px] font-bold text-primary">
+                Edit name or category
+              </Link>
+            )}
           </span>
           <button
             type="button"
@@ -190,16 +195,12 @@ function EditForm({ pkg }: { pkg: InventoryItem }) {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="lbl">Storage</span>
-          <ChoiceChips<Storage | "">
-            label="Storage"
+          <span className="lbl">Where it’s kept</span>
+          <ChoiceChips<StorageLocation | "">
+            label="Where it’s kept"
             value={storage}
             onChange={(v) => setStorage(v === storage ? "" : v)}
-            options={[
-              { value: "freezer", label: "Freezer" },
-              { value: "fridge", label: "Fridge" },
-              { value: "pantry", label: "Pantry" },
-            ]}
+            options={storageOptions(product?.category ?? pkg.category).map((v) => ({ value: v, label: STORAGE_LABEL[v] }))}
           />
         </div>
 

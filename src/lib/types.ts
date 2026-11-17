@@ -26,6 +26,28 @@ export const CATEGORIES: CategoryMeta[] = [
 export const categoryMeta = (c: Category | string): CategoryMeta =>
   CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
 
+/** Where a package is kept. "freezer" is the main freezer (the original value). */
+export type StorageLocation = "freezer" | "garage_freezer" | "fridge" | "pantry";
+
+export const STORAGE_LABEL: Record<StorageLocation, string> = {
+  freezer: "Main freezer",
+  garage_freezer: "Garage freezer",
+  fridge: "Fridge",
+  pantry: "Pantry",
+};
+
+/** Which locations to offer for a category, first = default. */
+export function storageOptions(category: string): StorageLocation[] {
+  if (category === "meat") return ["freezer", "garage_freezer"];
+  if (category === "oil") return ["pantry", "fridge"];
+  return ["pantry", "fridge", "freezer"];
+}
+
+/** Where a package lives. Meat saved before locations existed was in the main freezer. */
+export function locationOf(p: { storage: StorageLocation | null; category: string }): StorageLocation | null {
+  return p.storage ?? (p.category === "meat" ? "freezer" : null);
+}
+
 export type Unit = "oz" | "lb" | "g" | "kg" | "count" | "ml" | "l";
 export const UNITS: Unit[] = ["oz", "lb", "g", "kg", "count", "ml", "l"];
 export type UnitKind = "weight" | "volume" | "count";
@@ -58,7 +80,7 @@ export interface InventoryItem {
   original_quantity: number | null;
   expiration_date: string | null;
   added_at: string | null;
-  storage: "freezer" | "fridge" | "pantry" | null;
+  storage: StorageLocation | null;
   source: "manual" | "barcode" | "photo" | "shopping_list" | null;
   barcode: string | null;
   photo_url: string | null;

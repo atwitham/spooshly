@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Info, Plus, Search } from "lucide-react";
+import { ChevronDown, Info, Pencil, Plus, Search } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
 import { useKitchen } from "@/lib/KitchenProvider";
 import { duplicatePackage } from "@/lib/db";
 import { onHandBase, weeksOnHand } from "@/lib/insights";
 import { matchesQuery } from "@/lib/normalize";
-import { CATEGORIES, type Category, type InventoryItem, type Product, categoryMeta } from "@/lib/types";
+import { CATEGORIES, type Category, type InventoryItem, type Product, type StorageLocation, STORAGE_LABEL, categoryMeta, locationOf, storageOptions } from "@/lib/types";
 import { formatQty, formatStored } from "@/lib/units";
 import { daysUntil, expiryChip, fmtDay, fmtMonth } from "@/lib/dates";
 import { BackButton, CategoryIcon, CategoryTile, Spinner } from "@/components/ui";
@@ -33,6 +33,8 @@ function CategoryView() {
   const k = useKitchen();
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>("expiring");
+  const [place, setPlace] = useState<StorageLocation | "all">("all");
+  const places = category === "meat" || category === "oil" ? storageOptions(category) : [];
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showAll, setShowAll] = useState<Record<string, boolean>>({});
   const [sheet, setSheet] = useState<{ pkg: InventoryItem; product: Product; reason: "cooked" | "expired" } | null>(null);
@@ -55,7 +57,7 @@ function CategoryView() {
   }, [picker]);
 
   const groups = useMemo(() => {
-    const pk = k.packages.filter((p) => p.category === category && p.product_id);
+    const pk = k.packages.filter((p) => p.category === category && p.product_id && (place === "all" || locationOf(p) === place));
     const byProduct = new Map<string, InventoryItem[]>();
     pk.forEach((p) => byProduct.set(p.product_id!, [...(byProduct.get(p.product_id!) ?? []), p]));
     const list = Array.from(byProduct.entries())
@@ -78,7 +80,7 @@ function CategoryView() {
       const eb = b.packages.map(expKey).sort()[0];
       return ea < eb ? -1 : ea > eb ? 1 : a.product.name.localeCompare(b.product.name);
     });
-  }, [k.packages, k, category, q, sort]);
+  }, [k.packages, k, category, q, sort, place]);
 
   // Everything starts collapsed. Only a product you jumped to (from search
   // or right after adding it) opens.
@@ -167,6 +169,33 @@ function CategoryView() {
           ))}
         </div>
 
+        {places.length > 0 && (
+          <div
+            role="radiogroup"
+            aria-label="Where it’s kept"
+            className="grid gap-1 rounded-2xl bg-track p-1"
+            style={{ gridTemplateColumns: `repeat(${places.length + 1}, minmax(0, 1fr))` }}
+          >
+            {(["all", ...places] as (StorageLocation | "all")[]).map((v) => {
+              const n = k.packages.filter((p) => p.category === category && (v === "all" || locationOf(p) === v)).length;
+              const on = place === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setPlace(v)}
+                  className={`flex min-h-[46px] flex-col items-center justify-center rounded-xl px-1 leading-tight ${on ? "bg-surface text-ink shadow-[0_1px_3px_rgba(14,35,24,.12)]" : "text-[#4B5A52]"}`}
+                >
+                  <span className="text-[13px] font-bold">{v === "all" ? "Everywhere" : STORAGE_LABEL[v]}</span>
+                  <span className="text-[11px] font-semibold text-muted">{n} item{n === 1 ? "" : "s"}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {k.ready && category === "meat" && !q && <FreezerSpace compact />}
 
         {!k.ready ? (
@@ -230,6 +259,13 @@ function CategoryView() {
 
                 {isOpen && (
                   <>
+                    <Link
+                      href={`/product/${product.id}`}
+                      className="flex min-h-[44px] items-center gap-2 border-t border-divider px-4 text-[13px] font-bold text-primary"
+                    >
+                      <Pencil size={15} strokeWidth={2} aria-hidden />
+                      Edit name or category
+                    </Link>
                     {shown.map((pkg) => {
                       const d = daysUntil(pkg.expiration_date);
                       const expired = d !== null && d < 0;
@@ -239,6 +275,7 @@ function CategoryView() {
                           <div className="min-w-0 flex-1">
                             <div className="text-base font-bold">{size}</div>
                             <div className="mt-0.5 text-[13px] text-muted">
+                              {locationOf(pkg) && places.length > 0 && <span className="font-semibold text-ink">{STORAGE_LABEL[locationOf(pkg)!]} · </span>}
                               Added {fmtDay(added(pkg))}
                               {pkg.expiration_date && (
                                 <>
