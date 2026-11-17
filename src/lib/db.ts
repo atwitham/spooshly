@@ -20,6 +20,7 @@ import {
   type Unit,
   type UsageLogEntry,
   DEFAULT_SETTINGS,
+  categoryMeta,
   eventTime,
 } from "./types";
 import { findExact, normalizedKey, pickDisplayName } from "./normalize";
@@ -513,27 +514,45 @@ export async function addPackages(input: AddInput) {
 // ---------------------------------------------------------------------------
 // Products: rename, recategorize, merge
 // ---------------------------------------------------------------------------
+/**
+ * Rename a product and/or move it to another category. Everything stored
+ * under it follows: every package, its usage history and shopping-list
+ * entries. The old name is kept as an alias so typing it still matches.
+ */
 export async function renameProduct(p: Product, name: string, category: Category, userId: string | null) {
-  const key = normalizedKey(name);
-  const aliases = name.trim() !== p.name && !p.aliases.includes(p.name) ? [...p.aliases, p.name] : p.aliases;
+  const newName = name.trim() || p.name;
+  const key = normalizedKey(newName);
+  const aliases = newName !== p.name && !p.aliases.includes(p.name) ? [...p.aliases, p.name] : p.aliases;
   const { error } = await supabase
     .from("products")
-    .update({ name: name.trim(), normalized_key: key, aliases, category, is_meat: category === "meat" ? true : p.category === "meat" ? false : p.is_meat })
+    .update({ name: newName, normalized_key: key, aliases, category, is_meat: category === "meat" })
     .eq("id", p.id);
   if (error) {
     if (/duplicate|unique/i.test(error.message)) throw new Error("Another product already has that name. Use Merge duplicates instead.");
     throw error;
   }
-  if (category !== p.category) {
-    await supabase.from("inventory_items").update({ category }).eq("product_id", p.id);
+  if (category !== p.category || newName !== p.name) {
+    const itemPatch: Record<string, unknown> = { category, name: newName };
+    const r1 = await supabase.from("inventory_items").update(itemPatch).eq("product_id", p.id);
+    if (r1.error) throw r1.error;
+    if (category !== p.category) {
+      await supabase.from("usage_log").update({ category }).eq("product_id", p.id);
+      await supabase.from("shopping_list").update({ category }).eq("product_id", p.id);
+    }
   }
-  await logActivity({
-    household_id: p.household_id,
-    type: "edit",
-    product_id: p.id,
-    summary: `Renamed ${p.name} → ${name.trim()}`,
-    actor: userId,
-  });
+  const changes = [
+    newName !== p.name ? `renamed ${p.name} → ${newName}` : null,
+    category !== p.category ? `moved to ${categoryMeta(category).label}` : null,
+  ].filter(Boolean);
+  if (changes.length) {
+    await logActivity({
+      household_id: p.household_id,
+      type: "edit",
+      product_id: p.id,
+      summary: `${newName}: ${changes.join(", ")}`,
+      actor: userId,
+    });
+  }
 }
 
 export async function mergeProducts(survivor: Product, loser: Product, userId: string | null) {

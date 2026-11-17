@@ -7,7 +7,7 @@ import { KitchenProvider, useKitchen } from "@/lib/KitchenProvider";
 import NavBar from "./NavBar";
 
 // Full-screen routes: forms with a pinned action bar, no floating nav.
-const FULL_SCREEN = [/^\/add/, /^\/package\//, /^\/settings\/reset/];
+const FULL_SCREEN = [/^\/add/, /^\/package\//, /^\/product\//, /^\/settings\/reset/];
 
 function NeedsMigration() {
   return (
