@@ -143,6 +143,10 @@ function AddForm() {
 
   useEffect(() => {
     if (exact && !(chosen && chosen.id === exact.id)) {
+      // Typed an existing product's name without tapping the suggestion:
+      // still use its usual unit and size.
+      setUnit(exact.display_unit);
+      if (exact.default_package_size) setSize(fmtNum(fromBase(exact.default_package_size, exact.display_unit)));
       setCategory(exact.category);
       if (categoryMeta(exact.category).dateKind !== "expires") setExpires("");
       setStorage(defaultStorage(exact.category, exact));

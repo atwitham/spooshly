@@ -39,19 +39,20 @@ export const categoryMeta = (c: Category | string): CategoryMeta =>
   CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];
 
 /** Where a package is kept. "freezer" is the main freezer (the original value). */
-export type StorageLocation = "freezer" | "garage_freezer" | "fridge" | "pantry";
+export type StorageLocation = "freezer" | "garage_freezer" | "fridge" | "pantry" | "cabinet";
 
 export const STORAGE_LABEL: Record<StorageLocation, string> = {
   freezer: "Main freezer",
   garage_freezer: "Garage freezer",
   fridge: "Fridge",
   pantry: "Pantry",
+  cabinet: "Cabinet",
 };
 
 /** Which locations to offer for a category, first = default. */
 export function storageOptions(category: string): StorageLocation[] {
   if (category === "meat") return ["freezer", "garage_freezer"];
-  if (category === "oil") return ["pantry", "fridge"];
+  if (category === "oil") return ["cabinet", "pantry", "fridge"];
   return ["pantry", "fridge", "freezer"];
 }
 
