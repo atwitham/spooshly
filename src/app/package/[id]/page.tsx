@@ -7,7 +7,7 @@ import { Clock, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
 import { useKitchen } from "@/lib/KitchenProvider";
 import { deletePackage, editPackage, ensureProduct, fetchActivity } from "@/lib/db";
-import { type ActivityEntry, type InventoryItem, type Product, type StorageLocation, type Unit, STORAGE_LABEL, UNITS, locationOf, storageOptions } from "@/lib/types";
+import { type ActivityEntry, type InventoryItem, type Product, type StorageLocation, type Unit, STORAGE_LABEL, UNITS, categoryMeta, locationOf, storageOptions } from "@/lib/types";
 import { fmtNum, formatStored, unitKind } from "@/lib/units";
 import { daysUntil, fmtDay, todayISO } from "@/lib/dates";
 import { CategoryTile, ChoiceChips, FullScreen, Spinner, centerOnFocus, enterToNext } from "@/components/ui";
@@ -57,7 +57,8 @@ function EditForm({ pkg }: { pkg: InventoryItem }) {
   }, [confirm]);
 
   const qty = Number(amount.replace(",", "."));
-  const expired = (daysUntil(expires || null) ?? 0) < 0;
+  const dateKind = categoryMeta(product?.category ?? pkg.category).dateKind;
+  const expired = dateKind === "expires" && (daysUntil(expires || null) ?? 0) < 0;
 
   async function save(e?: React.FormEvent) {
     e?.preventDefault();
@@ -185,7 +186,7 @@ function EditForm({ pkg }: { pkg: InventoryItem }) {
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="lbl">Expires</span>
+            <span className="lbl">{dateKind === "expires" ? "Expires" : "Best by (optional)"}</span>
             <input className={`fld ${expired ? "!text-danger-ink" : ""}`} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} onFocus={centerOnFocus} />
           </label>
           <label className="flex flex-col gap-1.5">

@@ -6,7 +6,16 @@ export interface CategoryMeta {
   short: string;
   tint: string;
   ink: string;
-  /** Default shelf life for new packages, in days (null = no default). */
+  /**
+   * How dates work for this category:
+   *  - "expires": a real use-by date (food safety). Filled in automatically,
+   *    shows in Use soon, turns red and offers Toss when it passes.
+   *  - "best_by": an optional quality date. Never filled in for you, never
+   *    nags, never "expires" — just notes when it's past its best.
+   *  - "none": no date at all.
+   */
+  dateKind: "expires" | "best_by" | "none";
+  /** Default shelf life for new packages, in days (only for "expires"). */
   shelfLifeDays: number | null;
   /** Noun used for one count-unit package (e.g. "1 jar"). */
   countNoun: string;
@@ -14,14 +23,17 @@ export interface CategoryMeta {
 
 // Sort order = display order.
 export const CATEGORIES: CategoryMeta[] = [
-  { value: "meat", label: "Meat & Frozen", short: "Meat", tint: "#FFE4DA", ink: "#C2410C", shelfLifeDays: 182, countNoun: "pack" },
-  { value: "seasoning", label: "Seasoning & Spices", short: "Seasoning", tint: "#FFF0CC", ink: "#A16207", shelfLifeDays: 730, countNoun: "jar" },
-  { value: "oil", label: "Oils & Condiments", short: "Oils", tint: "#FFF7C2", ink: "#A16207", shelfLifeDays: 365, countNoun: "bottle" },
-  { value: "essentials", label: "Home Essentials", short: "Essentials", tint: "#EDE7FF", ink: "#6D28D9", shelfLifeDays: null, countNoun: "pack" },
-  { value: "produce", label: "Produce", short: "Produce", tint: "#E1F7E6", ink: "#15803D", shelfLifeDays: 7, countNoun: "item" },
-  { value: "pantry", label: "Pantry", short: "Pantry", tint: "#E0F0FF", ink: "#1D63C9", shelfLifeDays: 365, countNoun: "item" },
-  { value: "other", label: "Other", short: "Other", tint: "#EEF0EC", ink: "#4B5A52", shelfLifeDays: null, countNoun: "item" },
+  { value: "meat", label: "Meat & Frozen", short: "Meat", tint: "#FFE4DA", ink: "#C2410C", dateKind: "expires", shelfLifeDays: 182, countNoun: "pack" },
+  { value: "seasoning", label: "Seasoning & Spices", short: "Seasoning", tint: "#FFF0CC", ink: "#A16207", dateKind: "best_by", shelfLifeDays: null, countNoun: "jar" },
+  { value: "oil", label: "Oils & Condiments", short: "Oils", tint: "#FFF7C2", ink: "#A16207", dateKind: "best_by", shelfLifeDays: null, countNoun: "bottle" },
+  { value: "essentials", label: "Home Essentials", short: "Essentials", tint: "#EDE7FF", ink: "#6D28D9", dateKind: "none", shelfLifeDays: null, countNoun: "pack" },
+  { value: "produce", label: "Produce", short: "Produce", tint: "#E1F7E6", ink: "#15803D", dateKind: "expires", shelfLifeDays: 7, countNoun: "item" },
+  { value: "pantry", label: "Pantry", short: "Pantry", tint: "#E0F0FF", ink: "#1D63C9", dateKind: "best_by", shelfLifeDays: null, countNoun: "item" },
+  { value: "other", label: "Other", short: "Other", tint: "#EEF0EC", ink: "#4B5A52", dateKind: "none", shelfLifeDays: null, countNoun: "item" },
 ];
+
+/** Does this category's date mean "unsafe after" (meat, produce)? */
+export const hasRealExpiry = (category: string) => categoryMeta(category).dateKind === "expires";
 
 export const categoryMeta = (c: Category | string): CategoryMeta =>
   CATEGORIES.find((x) => x.value === c) ?? CATEGORIES[CATEGORIES.length - 1];

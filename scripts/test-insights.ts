@@ -209,3 +209,19 @@ test("freezer space caps meat buy suggestions", () => {
   ctx.settings = { ...settings, freezer_capacity_g: used + toBase(2, "lb") }; // 2 lb of room
   assert.equal(recommendations(ctx).find((r) => r.product.id === "turkey")?.qtyLabel, "1 lb");
 });
+
+test("seasonings and oils never 'expire' or nag; meat still does", async () => {
+  const { expiryChip } = await import("../src/lib/dates");
+  const old = "2025-01-01";
+  assert.equal(expiryChip(old, "meat", NOW)?.tone, "danger");
+  assert.deepEqual(expiryChip(old, "seasoning", NOW), { tone: "soft", text: "Past best-by" });
+  assert.equal(expiryChip("2026-10-27", "seasoning", NOW), null); // 2 days out: no warning
+  assert.equal(expiryChip("2026-10-27", "meat", NOW)?.text, "2 days left");
+  assert.equal(expiryChip(old, "essentials", NOW), null);
+
+  const ctx = sampleCtx();
+  const paprika = ctx.products.find((p) => p.id === "paprika")!;
+  ctx.packages.push({ ...pkg("paprika", 1, "2026-10-26"), category: "seasoning", unit: "count" });
+  ctx.events.push({ ...use("paprika", 1, 5), unit: "count", category: "seasoning" });
+  assert.equal(recommendations(ctx).find((r) => r.product.id === paprika.id && r.type === "use_soon"), undefined);
+});

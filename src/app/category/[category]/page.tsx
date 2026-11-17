@@ -214,7 +214,7 @@ function CategoryView() {
             const qty = formatQty(onHand, product.unit_kind, product.display_unit, { withLb: true });
             const weeks = weeksOnHand(product, k.ctx);
             const soonest = packages.find((p) => p.expiration_date);
-            const soonChip = expiryChip(soonest?.expiration_date ?? null);
+            const soonChip = expiryChip(soonest?.expiration_date ?? null, category);
             const soonDays = daysUntil(soonest?.expiration_date ?? null);
             const shown = showAll[product.id] ? packages : packages.slice(0, PREVIEW);
             const toggle = () => setOpen((o) => ({ ...o, [product.id]: !isOpen }));
@@ -234,7 +234,7 @@ function CategoryView() {
                         (soonChip && soonDays !== null && soonDays <= 30 ? (
                           <>
                             {" · "}
-                            <span className={`font-bold ${soonChip.tone === "danger" ? "text-danger-ink" : "text-warn-ink"}`}>{soonChip.text}</span>
+                            <span className={`font-bold ${soonChip.tone === "danger" ? "text-danger-ink" : soonChip.tone === "soft" ? "text-muted" : "text-warn-ink"}`}>{soonChip.text}</span>
                           </>
                         ) : (
                           ` · added ${fmtDay(added(packages[packages.length - 1]))}`
@@ -268,7 +268,10 @@ function CategoryView() {
                     </Link>
                     {shown.map((pkg) => {
                       const d = daysUntil(pkg.expiration_date);
-                      const expired = d !== null && d < 0;
+                      // Only meat and produce truly expire; seasonings, oils and pantry items have a best-by.
+                      const realExpiry = meta.dateKind === "expires";
+                      const expired = realExpiry && d !== null && d < 0;
+                      const pastBest = !realExpiry && d !== null && d < 0;
                       const size = formatStored(pkg.quantity, pkg.unit);
                       return (
                         <div key={pkg.id} className="flex items-center gap-2.5 border-t border-divider py-3 pl-4 pr-3" style={expired ? { background: "#FFF7F5" } : undefined}>
@@ -282,8 +285,15 @@ function CategoryView() {
                                   {" · "}
                                   {expired ? (
                                     <span className="font-bold text-danger-ink">Expired {fmtMonth(pkg.expiration_date)}</span>
-                                  ) : (
+                                  ) : pastBest ? (
+                                    <span className="font-semibold text-[#6B5A2E]">
+                                      Past best-by {fmtMonth(pkg.expiration_date)}
+                                      {category === "oil" ? " · check the smell" : " · still fine, may be milder"}
+                                    </span>
+                                  ) : realExpiry ? (
                                     `Expires ${d !== null && d <= 31 ? fmtDay(pkg.expiration_date) : fmtMonth(pkg.expiration_date)}`
+                                  ) : (
+                                    `Best by ${fmtMonth(pkg.expiration_date)}`
                                   )}
                                 </>
                               )}
