@@ -7,8 +7,16 @@ import { type Invite, type Person, cancelInvite, createInvite, fetchHousehold, i
 import { fmtDay } from "@/lib/dates";
 
 function inviteMessage(name: string, email: string) {
-  const hi = name.trim() ? `Hi ${name.trim().split(" ")[0]}! ` : "";
-  return `${hi}I added you to our Splooshly kitchen so we can share the same inventory and shopping list.\n\n1. Open this link: ${inviteLink(email)}\n2. Create your account with this email: ${email}\n3. On your iPhone, tap Share › Add to Home Screen so it opens like an app.`;
+  const first = name.trim().split(" ")[0];
+  const site = window.location.host;
+  return [
+    `Hi${first ? ` ${first}` : ""}! I added you to our Splooshly kitchen so we can share the same inventory and shopping list.`,
+    "",
+    `1. Open your invite: ${inviteLink(email)}`,
+    "2. Choose a password and tap Create account (your email is already filled in).",
+    "3. Tap the confirmation link we email you.",
+    `4. Sign in at ${site}, then tap Share › Add to Home Screen so it opens like an app.`,
+  ].join("\n");
 }
 
 /** Settings › Household: who's in the kitchen, and invite someone by email. */
@@ -87,7 +95,7 @@ export default function Household() {
     setTimeout(() => setCopied(false), 2500);
   };
   const mailto = (n: string, em: string) =>
-    `mailto:${encodeURIComponent(em)}?subject=${encodeURIComponent("Join our Splooshly kitchen")}&body=${encodeURIComponent(inviteMessage(n, em))}`;
+    `mailto:${encodeURIComponent(em)}?subject=${encodeURIComponent("Join our Splooshly kitchen")}&body=${encodeURIComponent(inviteMessage(n, em).replace(/\n/g, "\r\n"))}`;
 
   const row = "flex min-h-[60px] items-center gap-3 border-t border-divider px-4 py-2.5 first:border-t-0";
 
@@ -150,7 +158,7 @@ export default function Household() {
 
         {form && (
           <form onSubmit={submit} className="flex flex-col gap-2.5 border-t border-divider p-4 first:border-t-0">
-            <p className="m-0 text-[13px] text-muted">They’ll get their own login and see the same kitchen, list and insights as you.</p>
+            <p className="m-0 text-[13px] text-muted">They get their own login and share your kitchen, list and insights.</p>
             <label className="flex flex-col gap-1">
               <span className="lbl">Their name</span>
               <input className="fld" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" placeholder="e.g. Codi" />
@@ -183,7 +191,7 @@ export default function Household() {
           <div className="flex flex-col gap-2.5 border-t border-divider bg-primary-tint p-4">
             <p className="m-0 text-[15px] font-bold text-[#0F3D22]">Invite ready for {sent.name.trim() || sent.email}</p>
             <p className="m-0 text-[13px] leading-snug text-[#2E4A3B]">
-              Send them the link. When they create an account with <strong>{sent.email}</strong>, they’ll join your kitchen automatically.
+              Send them the link. Once they sign up with <strong>{sent.email}</strong>, they’re in.
             </p>
             <div className="grid grid-cols-2 gap-2">
               <a href={mailto(sent.name, sent.email)} className="btn-primary h-12 rounded-[14px] text-[15px]">
