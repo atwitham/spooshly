@@ -86,7 +86,8 @@ function EditForm({ pkg }: { pkg: InventoryItem }) {
     setBusy(true);
     try {
       await deletePackage(pkg, product, user?.id ?? null);
-      router.replace(`/category/${pkg.category}`);
+      if (window.history.length > 1) router.back();
+      else router.replace(`/category/${pkg.category}`);
       k.toast(`Deleted ${formatStored(pkg.quantity, pkg.unit)} entry`);
       await k.reload();
     } catch (e2) {

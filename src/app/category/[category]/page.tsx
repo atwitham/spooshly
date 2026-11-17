@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Info, Pencil, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, Info, MapPin, Pencil, Plus, Search } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
 import { useKitchen } from "@/lib/KitchenProvider";
-import { duplicatePackage } from "@/lib/db";
+import { duplicatePackage, setStorageBulk } from "@/lib/db";
 import { onHandBase, weeksOnHand } from "@/lib/insights";
 import { matchesQuery } from "@/lib/normalize";
 import { CATEGORIES, type Category, type InventoryItem, type Product, type StorageLocation, STORAGE_LABEL, categoryMeta, locationOf, storageOptions } from "@/lib/types";
@@ -40,6 +40,38 @@ function CategoryView() {
   const [sheet, setSheet] = useState<{ pkg: InventoryItem; product: Product; reason: "cooked" | "expired" } | null>(null);
   const [picker, setPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [moving, setMoving] = useState(false);
+
+  // ---- Remember where you were when you open an edit screen, and put you
+  // back there (same filters, open sections and scroll) when you return.
+  const placeKey = `splooshly:place:${category}`;
+  const pendingScroll = useRef<number | null>(null);
+  const rememberPlace = () => {
+    try {
+      sessionStorage.setItem(placeKey, JSON.stringify({ q, sort, place, open, showAll, y: window.scrollY }));
+    } catch {
+      /* private mode */
+    }
+  };
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(placeKey);
+      if (!raw) return;
+      sessionStorage.removeItem(placeKey);
+      const v = JSON.parse(raw);
+      setQ(v.q ?? "");
+      setSort(v.sort ?? "expiring");
+      setPlace(v.place ?? "all");
+      setOpen(v.open ?? {});
+      setShowAll(v.showAll ?? {});
+      pendingScroll.current = typeof v.y === "number" ? v.y : null;
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeKey]);
 
   useEffect(() => {
     try {
@@ -92,7 +124,36 @@ function CategoryView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [k.ready, groups.length > 0]);
 
+  useEffect(() => {
+    if (!k.ready || pendingScroll.current === null) return;
+    const y = pendingScroll.current;
+    pendingScroll.current = null;
+    // Wait for the restored sections to render, then jump back.
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior })));
+  }, [k.ready, groups]);
+
   const totalPackages = groups.reduce((s, g) => s + g.packages.length, 0);
+
+  const toggleSel = (ids: string[], on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (on ? next.add(id) : next.delete(id)));
+      return next;
+    });
+
+  async function moveSelected(to: StorageLocation) {
+    const pkgs = k.packages.filter((p) => selected.has(p.id));
+    if (!pkgs.length) return;
+    setMoving(true);
+    try {
+      const undo = await setStorageBulk(pkgs, to, STORAGE_LABEL[to], user?.id ?? null);
+      await k.reload();
+      setSelected(new Set());
+      k.toast(`Moved ${pkgs.length} to ${STORAGE_LABEL[to]}`, undo);
+    } finally {
+      setMoving(false);
+    }
+  }
 
   async function duplicate(pkg: InventoryItem, product: Product) {
     const undo = await duplicatePackage(pkg, user?.id ?? null);
@@ -196,7 +257,24 @@ function CategoryView() {
           </div>
         )}
 
-        {k.ready && category === "meat" && !q && <FreezerSpace compact />}
+        {places.length > 0 && (
+          <button
+            type="button"
+            aria-pressed={selecting}
+            onClick={() => (setSelecting((v) => !v), setSelected(new Set()))}
+            className={`flex h-11 items-center justify-center gap-2 rounded-[14px] text-[15px] font-bold ${selecting ? "bg-ink text-white" : "bg-surface text-ink shadow-soft"}`}
+          >
+            <MapPin size={18} aria-hidden />
+            {selecting ? "Done sorting" : `Sort into places (${places.map((p) => STORAGE_LABEL[p].toLowerCase()).join(" / ")})`}
+          </button>
+        )}
+        {selecting && (
+          <p className="m-0 text-[13px] leading-snug text-muted">
+            Tick packages (or a whole product), then choose where they live at the bottom. Undo is available after each move.
+          </p>
+        )}
+
+        {k.ready && category === "meat" && !q && !selecting && <FreezerSpace compact />}
 
         {!k.ready ? (
           <Spinner />
@@ -257,15 +335,38 @@ function CategoryView() {
                   <ChevronDown size={22} className="mt-1 flex-none text-muted transition-transform" style={{ transform: isOpen ? "rotate(180deg)" : "none" }} aria-hidden />
                 </button>
 
+                {selecting && (() => {
+                  const ids = packages.map((p) => p.id);
+                  const n = ids.filter((id) => selected.has(id)).length;
+                  const all = n === ids.length;
+                  return (
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={all ? true : n > 0 ? "mixed" : false}
+                      onClick={() => toggleSel(ids, !all)}
+                      className="flex min-h-[48px] w-full items-center gap-3 border-t border-divider px-4 text-left text-[14px] font-bold"
+                    >
+                      <span className={`flex h-6 w-6 flex-none items-center justify-center rounded-md border-2 ${n ? "border-primary bg-primary text-white" : "border-[#B9C4BC]"}`}>
+                        {all ? <Check size={16} strokeWidth={3} aria-hidden /> : n > 0 ? <span className="h-0.5 w-3 bg-white" /> : null}
+                      </span>
+                      {all ? `All ${ids.length} selected` : n > 0 ? `${n} of ${ids.length} selected` : `Select all ${ids.length} package${ids.length === 1 ? "" : "s"}`}
+                    </button>
+                  );
+                })()}
+
                 {isOpen && (
                   <>
+                    {!selecting && (
                     <Link
                       href={`/product/${product.id}`}
+                      onClick={rememberPlace}
                       className="flex min-h-[44px] items-center gap-2 border-t border-divider px-4 text-[13px] font-bold text-primary"
                     >
                       <Pencil size={15} strokeWidth={2} aria-hidden />
                       Edit name or category
                     </Link>
+                    )}
                     {shown.map((pkg) => {
                       const d = daysUntil(pkg.expiration_date);
                       // Only meat and produce truly expire; seasonings, oils and pantry items have a best-by.
@@ -274,7 +375,19 @@ function CategoryView() {
                       const pastBest = !realExpiry && d !== null && d < 0;
                       const size = formatStored(pkg.quantity, pkg.unit);
                       return (
-                        <div key={pkg.id} className="flex items-center gap-2.5 border-t border-divider py-3 pl-4 pr-3" style={expired ? { background: "#FFF7F5" } : undefined}>
+                        <div
+                          key={pkg.id}
+                          className={`flex items-center gap-2.5 border-t border-divider py-3 pl-4 pr-3 ${selecting ? "cursor-pointer" : ""}`}
+                          style={expired ? { background: "#FFF7F5" } : selecting && selected.has(pkg.id) ? { background: "#F1FAF3" } : undefined}
+                          onClick={selecting ? () => toggleSel([pkg.id], !selected.has(pkg.id)) : undefined}
+                          role={selecting ? "checkbox" : undefined}
+                          aria-checked={selecting ? selected.has(pkg.id) : undefined}
+                        >
+                          {selecting && (
+                            <span className={`flex h-6 w-6 flex-none items-center justify-center rounded-md border-2 ${selected.has(pkg.id) ? "border-primary bg-primary text-white" : "border-[#B9C4BC]"}`}>
+                              {selected.has(pkg.id) && <Check size={16} strokeWidth={3} aria-hidden />}
+                            </span>
+                          )}
                           <div className="min-w-0 flex-1">
                             <div className="text-base font-bold">{size}</div>
                             <div className="mt-0.5 text-[13px] text-muted">
@@ -299,19 +412,24 @@ function CategoryView() {
                               )}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setSheet({ pkg, product, reason: "cooked" })}
-                            className="h-11 rounded-xl bg-primary px-4 text-sm font-bold text-white"
-                          >
-                            Use
-                          </button>
-                          <PackageMenu
-                            label={`${size} package`}
-                            editHref={`/package/${pkg.id}`}
-                            onDuplicate={() => duplicate(pkg, product)}
-                            onToss={() => setSheet({ pkg, product, reason: "expired" })}
-                          />
+                          {!selecting && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setSheet({ pkg, product, reason: "cooked" })}
+                                className="h-11 rounded-xl bg-primary px-4 text-sm font-bold text-white"
+                              >
+                                Use
+                              </button>
+                              <PackageMenu
+                                label={`${size} package`}
+                                editHref={`/package/${pkg.id}`}
+                                onNavigate={rememberPlace}
+                                onDuplicate={() => duplicate(pkg, product)}
+                                onToss={() => setSheet({ pkg, product, reason: "expired" })}
+                              />
+                            </>
+                          )}
                         </div>
                       );
                     })}
@@ -339,6 +457,36 @@ function CategoryView() {
         </div>
       </main>
 
+      {selecting ? (
+        <div
+          className="fixed inset-x-3.5 z-40 mx-auto flex max-w-[440px] flex-col gap-2 rounded-[22px] bg-ink p-3 text-white shadow-nav"
+          style={{ bottom: "calc(16px + env(safe-area-inset-bottom))" }}
+          role="region"
+          aria-label="Move selected packages"
+        >
+          <div className="flex items-center justify-between px-1 text-[14px]">
+            <span className="font-bold">{selected.size ? `${selected.size} selected · move to` : "Tick packages to move them"}</span>
+            {selected.size > 0 && (
+              <button type="button" onClick={() => setSelected(new Set())} className="h-9 px-2 text-[13px] font-bold text-on-dark-muted">
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${places.length}, minmax(0, 1fr))` }}>
+            {places.map((pl) => (
+              <button
+                key={pl}
+                type="button"
+                disabled={!selected.size || moving}
+                onClick={() => moveSelected(pl)}
+                className="h-12 rounded-[14px] bg-accent text-[15px] font-extrabold text-ink disabled:opacity-40"
+              >
+                {STORAGE_LABEL[pl]}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
       <Link
         href={`/add?category=${category}`}
         className="fixed right-5 z-20 flex h-[52px] items-center gap-2 rounded-[18px] bg-primary px-5 text-[15px] font-bold text-white shadow-fab"
@@ -347,6 +495,7 @@ function CategoryView() {
         <Plus size={20} strokeWidth={2.4} aria-hidden />
         Add {meta.short.toLowerCase()}
       </Link>
+      )}
       <div aria-hidden className="h-20" />
 
       {sheet && <UseSheet pkg={sheet.pkg} product={sheet.product} initialReason={sheet.reason} onClose={() => setSheet(null)} />}

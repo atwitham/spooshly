@@ -723,3 +723,38 @@ export async function cancelInvite(id: string) {
 export function inviteLink(email: string) {
   return `${window.location.origin}/login?invite=1&email=${encodeURIComponent(email)}`;
 }
+
+// ---------------------------------------------------------------------------
+// Bulk: set where packages are kept (Kitchen › Sort into places)
+// ---------------------------------------------------------------------------
+export async function setStorageBulk(
+  pkgs: InventoryItem[],
+  storage: NonNullable<InventoryItem["storage"]>,
+  label: string,
+  userId: string | null
+): Promise<() => Promise<void>> {
+  const ids = pkgs.map((p) => p.id);
+  for (const batch of chunk(ids)) {
+    const { error } = await supabase.from("inventory_items").update({ storage }).in("id", batch);
+    if (error) throw error;
+  }
+  const actId = pkgs.length
+    ? await logActivity({
+        household_id: pkgs[0].household_id,
+        type: "edit",
+        summary: `Moved ${pkgs.length} package${pkgs.length === 1 ? "" : "s"} to ${label}`,
+        actor: userId,
+      })
+    : null;
+  // Undo puts every package back exactly where it was (including "not set").
+  const before = new Map<string, string[]>();
+  pkgs.forEach((p) => before.set(p.storage ?? "", [...(before.get(p.storage ?? "") ?? []), p.id]));
+  return async () => {
+    for (const [prev, list] of Array.from(before.entries())) {
+      for (const batch of chunk(list)) {
+        await supabase.from("inventory_items").update({ storage: prev || null }).in("id", batch);
+      }
+    }
+    await dropActivity(actId);
+  };
+}
