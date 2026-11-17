@@ -26,6 +26,9 @@ export default function Household() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [ready, setReady] = useState<boolean | null>(null);
   const [form, setForm] = useState(false);
+  /** Invite waiting on a second tap before it's cancelled (no fat-thumb removals). */
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState<{ name: string; email: string } | null>(null);
@@ -124,28 +127,61 @@ export default function Household() {
             </span>
           </div>
         ))}
-        {invites.map((inv) => (
-          <div key={inv.id} className={row}>
-            <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-warn-tint text-warn-ink">
-              <Mail size={18} strokeWidth={1.9} aria-hidden />
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-[15px] font-semibold">{inv.display_name ?? inv.email}</span>
-              <span className="truncate text-xs text-muted">Invited {fmtDay(inv.created_at)} · hasn’t joined yet</span>
-            </span>
-            <button type="button" aria-label={`Send ${inv.email}'s invite again`} onClick={() => share(inv.display_name ?? "", inv.email)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-chip">
-              <Share2 size={18} aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label={`Cancel invite for ${inv.email}`}
-              onClick={async () => (await cancelInvite(inv.id), await load())}
-              className="flex h-11 w-11 items-center justify-center rounded-xl text-muted"
-            >
-              <X size={18} aria-hidden />
-            </button>
-          </div>
-        ))}
+        {invites.map((inv) =>
+          confirming === inv.id ? (
+            <div key={inv.id} role="alertdialog" aria-label={`Cancel invite for ${inv.email}?`} className={`${row} !flex-col !items-stretch gap-2.5 bg-danger-tint py-3.5`}>
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[15px] font-bold text-danger-ink">Cancel {inv.display_name ?? inv.email}’s invite?</span>
+                <span className="text-xs text-danger-ink">Their link will stop working. You can invite them again later.</span>
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setConfirming(null)} className="h-11 rounded-xl bg-surface px-3.5 text-sm font-bold" autoFocus>
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={async () => {
+                    setRemoving(true);
+                    try {
+                      await cancelInvite(inv.id);
+                      await load();
+                    } catch (e) {
+                      setErr(e instanceof Error ? e.message : "Couldn’t cancel the invite.");
+                    } finally {
+                      setRemoving(false);
+                      setConfirming(null);
+                    }
+                  }}
+                  className="h-11 rounded-xl bg-danger px-3.5 text-sm font-bold text-white"
+                >
+                  {removing ? "Cancelling…" : "Cancel invite"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div key={inv.id} className={row}>
+              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-warn-tint text-warn-ink">
+                <Mail size={18} strokeWidth={1.9} aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[15px] font-semibold">{inv.display_name ?? inv.email}</span>
+                <span className="truncate text-xs text-muted">Invited {fmtDay(inv.created_at)} · hasn’t joined yet</span>
+              </span>
+              <button type="button" aria-label={`Send ${inv.email}'s invite again`} onClick={() => share(inv.display_name ?? "", inv.email)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-chip">
+                <Share2 size={18} aria-hidden />
+              </button>
+              <button
+                type="button"
+                aria-label={`Cancel invite for ${inv.email}`}
+                onClick={() => setConfirming(inv.id)}
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-muted"
+              >
+                <X size={18} aria-hidden />
+              </button>
+            </div>
+          )
+        )}
 
         {ready !== false && !form && (
           <button type="button" onClick={() => (setForm(true), setSent(null), setErr(null))} className={`${row} w-full text-left text-primary`}>
