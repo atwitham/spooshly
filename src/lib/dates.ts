@@ -39,10 +39,17 @@ export function addDaysISO(iso: string, days: number) {
   return todayISO(d);
 }
 
-/** Status chip for an expiry date: "3 days left", "Expired Aug". */
-export function expiryChip(iso: string | null, now = new Date()) {
+/**
+ * Status chip for a package's date.
+ * Real expiry (meat, produce): "3 days left", "Expired Aug".
+ * Best-by (seasoning, oils, pantry): only a calm "Past best-by" once passed.
+ */
+export function expiryChip(iso: string | null, category = "meat", now = new Date()) {
   const d = daysUntil(iso, now);
   if (d === null || !iso) return null;
+  const kind = category === "meat" || category === "produce" ? "expires" : category === "essentials" || category === "other" ? "none" : "best_by";
+  if (kind === "none") return null;
+  if (kind === "best_by") return d < 0 ? { tone: "soft" as const, text: "Past best-by" } : null;
   if (d < 0) {
     const e = parseDay(iso);
     return { tone: "danger" as const, text: `Expired ${format(e, e.getFullYear() === now.getFullYear() ? "MMM" : "MMM yyyy")}` };

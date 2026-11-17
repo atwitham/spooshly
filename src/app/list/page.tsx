@@ -88,7 +88,8 @@ export default function ShoppingListPage() {
         if (!(size > 0)) continue;
         let product = k.productById(it.product_id) ?? findExact(it.item_name, k.products) ?? null;
         if (!product) product = await ensureProduct(householdId, it.item_name, it.category, v.unit);
-        const shelf = product.default_shelf_life_days ?? categoryMeta(product.category).shelfLifeDays;
+        const shelf =
+          categoryMeta(product.category).dateKind === "expires" ? product.default_shelf_life_days ?? categoryMeta(product.category).shelfLifeDays : null;
         await addPackages({
           householdId,
           userId: user?.id ?? null,

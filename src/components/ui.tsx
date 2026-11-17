@@ -75,9 +75,15 @@ export function BackButton({ href, label = "Back" }: { href?: string; label?: st
   );
 }
 
-export function StatusChip({ tone, children }: { tone: "warn" | "danger" | "ok"; children: React.ReactNode }) {
+export function StatusChip({ tone, children }: { tone: "warn" | "danger" | "ok" | "soft"; children: React.ReactNode }) {
   const cls =
-    tone === "warn" ? "bg-warn-tint text-warn-ink" : tone === "danger" ? "bg-danger-tint text-danger-ink" : "bg-primary-tint text-primary-tint-ink";
+    tone === "warn"
+      ? "bg-warn-tint text-warn-ink"
+      : tone === "danger"
+        ? "bg-danger-tint text-danger-ink"
+        : tone === "soft"
+          ? "bg-soft text-muted"
+          : "bg-primary-tint text-primary-tint-ink";
   return <span className={`whitespace-nowrap rounded-full px-2 py-[3px] text-xs font-bold ${cls}`}>{children}</span>;
 }
 

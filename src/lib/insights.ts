@@ -12,6 +12,7 @@ import {
   type UsageLogEntry,
   categoryMeta,
   eventKind,
+  hasRealExpiry,
   eventTime,
 } from "./types";
 import { LB, OZ, fmtNum, formatQty, toBase, unitKind } from "./units";
@@ -158,6 +159,7 @@ export function categoryStats(ctx: Ctx, category: Category, w: Window) {
       (p) =>
         sameKind.some((x) => x.id === p.product_id) &&
         p.expiration_date &&
+        hasRealExpiry(p.category) &&
         (daysUntil(p.expiration_date, now) ?? 0) < 0 &&
         unitKind(p.unit) === kind
     )
@@ -289,6 +291,7 @@ export function recommendations(ctx: Ctx, w = periodWindow(1, ctx.now), category
     const reminder = s.expiry_reminder_days;
     const soon = pkgs
       .filter((x) => {
+        if (!hasRealExpiry(x.category)) return false; // best-by dates never trigger "use soon"
         const d = daysUntil(x.expiration_date, now);
         return d !== null && d >= 0 && d <= reminder;
       })
@@ -352,7 +355,7 @@ export function recommendations(ctx: Ctx, w = periodWindow(1, ctx.now), category
         signature: sig,
       });
     } else if (weeksLeft > 3 * s.target_supply_weeks) {
-      const expired = pkgs.filter((x) => (daysUntil(x.expiration_date, now) ?? 1) < 0).length;
+      const expired = pkgs.filter((x) => hasRealExpiry(x.category) && (daysUntil(x.expiration_date, now) ?? 1) < 0).length;
       const until = new Date(now.getTime() + (weeksLeft - s.target_supply_weeks) * WEEK);
       out.push({
         type: "overstock",

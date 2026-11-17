@@ -9,7 +9,7 @@ import { useKitchen } from "@/lib/KitchenProvider";
 import { addToList } from "@/lib/db";
 import { onHandBase, recommendations, runway, runwayShort } from "@/lib/insights";
 import { matchesQuery } from "@/lib/normalize";
-import { CATEGORIES, type InventoryItem, type Product } from "@/lib/types";
+import { CATEGORIES, type InventoryItem, type Product, hasRealExpiry } from "@/lib/types";
 import { formatQty, formatStored } from "@/lib/units";
 import { daysUntil, expiryChip, fmtDay } from "@/lib/dates";
 import { CategoryIcon, CategoryTile, Spinner, StatusChip, Wordmark } from "@/components/ui";
@@ -35,6 +35,7 @@ export default function HomePage() {
     const days = k.settings.expiry_reminder_days;
     return k.packages
       .filter((p) => {
+        if (!hasRealExpiry(p.category)) return false; // seasonings, oils etc. never "expire"
         const d = daysUntil(p.expiration_date);
         return d !== null && d <= days;
       })
@@ -207,7 +208,7 @@ export default function HomePage() {
                 </div>
                 {useSoon.slice(0, 6).map((pkg) => {
                   const product = k.productById(pkg.product_id);
-                  const chip = expiryChip(pkg.expiration_date);
+                  const chip = expiryChip(pkg.expiration_date, pkg.category);
                   const expired = (daysUntil(pkg.expiration_date) ?? 0) < 0;
                   return (
                     <div key={pkg.id} className="card flex items-center gap-3 p-3">

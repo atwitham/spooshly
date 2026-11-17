@@ -66,7 +66,8 @@ function AddForm() {
   );
   const target = chosen && chosen.name === query ? chosen : exact ?? null;
   const finalName = target ? target.name : query.trim();
-  const shelfDays = target?.default_shelf_life_days ?? categoryMeta(category).shelfLifeDays;
+  const dateKind = categoryMeta(category).dateKind;
+  const shelfDays = dateKind === "expires" ? target?.default_shelf_life_days ?? categoryMeta(category).shelfLifeDays : null;
   const inStock = target ? k.packages.filter((p) => p.product_id === target.id).length : 0;
 
   /** Where this goes by default: wherever the last package of it went, else the category's usual spot. */
@@ -88,16 +89,18 @@ function AddForm() {
     setStorage(defaultStorage(p.category, p));
     setUnit(p.display_unit);
     if (p.default_package_size) setSize(fmtNum(fromBase(p.default_package_size, p.display_unit)));
-    const days = p.default_shelf_life_days ?? categoryMeta(p.category).shelfLifeDays;
+    // Only meat/produce get an automatic date. Seasonings, oils, pantry: blank unless you add a best-by.
+    const days = categoryMeta(p.category).dateKind === "expires" ? p.default_shelf_life_days ?? categoryMeta(p.category).shelfLifeDays : null;
     setExpires(days ? addDaysISO(addedAt, days) : "");
   }
 
   function changeCategory(c: Category) {
     setCategory(c);
+    if (categoryMeta(c).dateKind !== "expires") setExpires("");
     setStorage(defaultStorage(c, target));
     if (!target) {
       setUnit(defaultUnit(c));
-      const days = categoryMeta(c).shelfLifeDays;
+      const days = categoryMeta(c).dateKind === "expires" ? categoryMeta(c).shelfLifeDays : null;
       setExpires(days ? addDaysISO(addedAt, days) : "");
     }
   }
@@ -141,6 +144,7 @@ function AddForm() {
   useEffect(() => {
     if (exact && !(chosen && chosen.id === exact.id)) {
       setCategory(exact.category);
+      if (categoryMeta(exact.category).dateKind !== "expires") setExpires("");
       setStorage(defaultStorage(exact.category, exact));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -352,10 +356,14 @@ function AddForm() {
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
+          {dateKind !== "none" ? (
           <label className="flex flex-col gap-1.5">
-            <span className="lbl">Expires</span>
-            <input className="fld" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} onFocus={centerOnFocus} />
-          </label>
+              <span className="lbl">{dateKind === "expires" ? "Expires" : "Best by (optional)"}</span>
+              <input className="fld" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} onFocus={centerOnFocus} />
+            </label>
+          ) : (
+            <div />
+          )}
           <label className="flex flex-col gap-1.5">
             <span className="lbl">Date added</span>
             <input
@@ -369,6 +377,15 @@ function AddForm() {
           </label>
         </div>
         {expires && shelfDays && <p className="m-0 text-[13px] text-muted">{shelfLifeCopy(target, category, shelfDays)?.replace(/^./, (c) => c.toUpperCase())}</p>}
+        {dateKind === "best_by" && (
+          <p className="m-0 text-[13px] text-muted">
+            {category === "seasoning"
+              ? "Spices don’t spoil, they just slowly lose flavor, so there’s no expiration here. Add the jar’s best-by date only if you want it noted."
+              : category === "oil"
+                ? "No expiration needed. Add a best-by if you like; Splooshly won’t nag about it, just note when it’s past."
+                : "Optional. Splooshly won’t nag about best-by dates, just note when they’re past."}
+          </p>
+        )}
         {err && (
           <p role="alert" className="text-sm font-semibold text-danger-ink">
             {err}
