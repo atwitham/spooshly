@@ -58,10 +58,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (isResetPage) return <>{children}</>;
 
-  if (loading) {
-    return <div className="flex h-[100dvh] items-center justify-center text-primary">Loading…</div>;
-  }
-  if (!user) return <>{children}</>;
+  const loadingScreen = <div className="flex h-[100dvh] items-center justify-center text-primary">Loading…</div>;
+  if (loading) return loadingScreen;
+  // Signed out: only the sign-in page can render. Anything else needs the
+  // kitchen, so show Loading while the redirect to /login happens.
+  if (!user) return isLoginPage ? <>{children}</> : loadingScreen;
 
   return (
     <KitchenProvider key={householdId ?? "none"}>
